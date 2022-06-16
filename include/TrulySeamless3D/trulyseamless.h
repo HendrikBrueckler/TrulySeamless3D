@@ -6,7 +6,7 @@
 #include <string>
 
 #define HEXEX_TESTING
-#include "HexExtractor.hh"
+#include "HexEx/HexExtractor.hh"
 #undef HEXEX_TESTING
 
 #include <algorithm>
@@ -14,12 +14,12 @@
 #include <queue>
 #include <tuple>
 
-#include "ExactPredicates.hh"
-#include "Utils.hh"
+#include "HexEx/ExactPredicates.hh"
+#include "HexEx/Utils.hh"
 
-#include "DerivedExactPredicates.hh"
-#include "Direction.hh"
-#include "FileAccessor.hh"
+#include "HexEx/DerivedExactPredicates.hh"
+#include "HexEx/Direction.hh"
+#include "HexEx/FileAccessor.hh"
 
 #include <Eigen/Sparse>
 

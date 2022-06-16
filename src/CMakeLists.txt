@@ -24,10 +24,10 @@ endif()
 list(APPEND ${TRULYSEAMLESS_LIB_NAME}_LIB_LIST OpenVolumeMesh::OpenVolumeMesh)
 
 # libhexex
-if (NOT TARGET HexExStatic)
+if (NOT TARGET HexEx::HexEx)
     add_subdirectory(${PROJECT_SOURCE_DIR}/extern/libHexEx extern/libHexEx EXCLUDE_FROM_ALL)
 endif()
-list(APPEND ${TRULYSEAMLESS_LIB_NAME}_LIB_LIST HexExStatic)
+list(APPEND ${TRULYSEAMLESS_LIB_NAME}_LIB_LIST HexEx::HexEx)
 
 #eigen
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
