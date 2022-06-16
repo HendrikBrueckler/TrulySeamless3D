@@ -33,24 +33,24 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Build/bin/)
 
 ### Standalone?
 if(${CMAKE_PROJECT_NAME} STREQUAL ${PROJECT_NAME})
-    set(TRULYSEAMLESS_STANDALONE TRUE)
+    set(TS3D_STANDALONE TRUE)
 else()
-    set(TRULYSEAMLESS_STANDALONE FALSE)
+    set(TS3D_STANDALONE FALSE)
 endif()
 
 ### Options
-option(TRULYSEAMLESS_BUILD_CLI         "Build CLI app for TrulySeamless3D" ${TRULYSEAMLESS_STANDALONE})
-option(TRULYSEAMLESS_ENABLE_LOGGING    "Allow logging of TrulySeamless3D"  ${TRULYSEAMLESS_STANDALONE})
-option(TRULYSEAMLESS_SUBMODULES_MANUAL "Skip automatic submodule download" OFF)
+option(TS3D_BUILD_CLI         "Build CLI app for TrulySeamless3D" ${TS3D_STANDALONE})
+option(TS3D_ENABLE_LOGGING    "Allow logging of TrulySeamless3D"  ${TS3D_STANDALONE})
+option(TS3D_SUBMODULES_MANUAL "Skip automatic submodule download" OFF)
 
 ### Load external libs
 add_subdirectory(extern)
 
 ### Add own lib
-set(TRULYSEAMLESS_LIB_NAME trulyseamless3d)
+set(TS3D_LIB_NAME trulyseamless3d)
 add_subdirectory(src)
 
 ### Add CLI
-if (TRULYSEAMLESS_BUILD_CLI)
+if (TS3D_BUILD_CLI)
     add_subdirectory(cli)
 endif()
