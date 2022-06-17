@@ -82,13 +82,43 @@ class TrulySeamless3D : public HexExtractor
 
     int m_totalSheetID;
 
+    // Mapping to original
+    std::vector<VertexHandle> m_vertexLocal;
+    std::vector<CellHandle> m_cellLocal;
+
   public:
     TrulySeamless3D();
 
     template <typename MeshT>
     TrulySeamless3D(const MeshT& tetmesh) : TrulySeamless3D()
     {
-        convertToHexExTetrahedralMesh(tetmesh, inputMesh);
+        using inPoint = typename MeshT::PointT;
+
+        auto toVec3d = [&](const inPoint& point)
+        {
+            return Vec3d(point[0], point[1], point[2]);
+        };
+
+        m_vertexLocal = std::vector<VertexHandle>(tetmesh.n_vertices());
+        m_cellLocal = std::vector<CellHandle>(tetmesh.n_cells());
+
+        // add vertices
+        inputMesh.clear(false);
+
+        for (auto v_it = tetmesh.vertices_begin(); v_it != tetmesh.vertices_end(); ++v_it)
+        {
+            auto v = inputMesh.add_vertex(toVec3d(tetmesh.vertex(*v_it)));
+            m_vertexLocal[v_it->idx()] = v;
+        }
+
+        // add tets
+        for (auto c_it = tetmesh.cells_begin(); c_it != tetmesh.cells_end(); ++c_it)
+        {
+            auto vertices = tetmesh.get_cell_vertices(*c_it);
+            auto tet = inputMesh.add_cell(vertices);
+            m_cellLocal[c_it->idx()] = tet;
+        }
+
         for (auto ch : inputMesh.cells())
             cellVertices[ch] = inputMesh.get_cell_vertices(ch);
     }
@@ -98,7 +128,7 @@ class TrulySeamless3D : public HexExtractor
     {
         for (auto ch : tetmesh.cells())
             for (auto cv_it = tetmesh.cv_iter(ch); cv_it.valid(); ++cv_it)
-                vertexParameters[ch][*cv_it] = toVec3d(parameters[ch][*cv_it]);
+                setParam(ch, *cv_it, toVec3d(parameters[ch][*cv_it]));
         init();
     }
 
@@ -110,12 +140,17 @@ class TrulySeamless3D : public HexExtractor
         init();
     }
 
-    bool sanitize(double perturb = 0.0, bool keepOriginalTransitions = true);
-
-    Parameter& parameter(CellHandle ch, VertexHandle vh)
+    void setParam(CellHandle orig_cell, VertexHandle orig_vertex, const Parameter& param)
     {
-        return vertexParameters[ch][vh];
+        vertexParameters[m_cellLocal[orig_cell.idx()]][m_vertexLocal[orig_vertex.idx()]] = param;
     }
+
+    Parameter getParam(CellHandle orig_cell, VertexHandle orig_vertex)
+    {
+        return vertexParameters[m_cellLocal[orig_cell.idx()]][m_vertexLocal[orig_vertex.idx()]];
+    }
+
+    bool sanitize(double perturb = 0.0, bool keepOriginalTransitions = true);
 
     bool init();
 
@@ -125,6 +160,12 @@ class TrulySeamless3D : public HexExtractor
     }
 
   private:
+
+    Parameter& parameter(CellHandle ch, VertexHandle vh)
+    {
+        return vertexParameters[ch][vh];
+    }
+
     // Compute Transition Functions
     void extractTransitionFunction(FaceHandle fh);
     void extractTransitionFunctions();
