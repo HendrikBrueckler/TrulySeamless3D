@@ -39,6 +39,14 @@ class TrulySeamless3D : public HexExtractor
         SHEET_ALIGNZ = 2
     };
 
+    enum BranchType
+    {
+        BRANCH_NONE = -1,
+        BRANCH_ALIGNX = 0,
+        BRANCH_ALIGNY = 1,
+        BRANCH_ALIGNZ = 2
+    };
+
   private:
     bool m_failFlag = false;
 
@@ -53,6 +61,7 @@ class TrulySeamless3D : public HexExtractor
 
     // Sheet Info
     FaceProperty<SheetType> m_alignmentType; // u, v or w : 0,1,2
+    EdgeProperty<BranchType> m_branchType; // u, v or w : 0,1,2
     FaceProperty<int> m_sheet;               //-2 -> usual face, >=0 -> correspoing sheet id
     EdgeProperty<int> m_branches;
     VertexProperty<bool> m_node;
@@ -82,9 +91,15 @@ class TrulySeamless3D : public HexExtractor
 
     int m_totalSheetID;
 
+    EdgeProperty<bool> m_edgeFeature;
+    VertexProperty<bool> m_vertexFeature;
+    FaceProperty<bool> m_faceFeature;
+
     // Mapping to original
     std::vector<VertexHandle> m_vertexLocal;
     std::vector<CellHandle> m_cellLocal;
+    std::vector<EdgeHandle> m_edgeLocal;
+    std::vector<FaceHandle> m_faceLocal;
 
   public:
     TrulySeamless3D();
@@ -101,6 +116,8 @@ class TrulySeamless3D : public HexExtractor
 
         m_vertexLocal = std::vector<VertexHandle>(tetmesh.n_vertices());
         m_cellLocal = std::vector<CellHandle>(tetmesh.n_cells());
+        m_edgeLocal = std::vector<EdgeHandle>(tetmesh.n_edges());
+        m_faceLocal = std::vector<FaceHandle>(tetmesh.n_faces());
 
         // add vertices
         inputMesh.clear(false);
@@ -109,6 +126,22 @@ class TrulySeamless3D : public HexExtractor
         {
             auto v = inputMesh.add_vertex(toVec3d(tetmesh.vertex(*v_it)));
             m_vertexLocal[v_it->idx()] = v;
+        }
+
+        for (auto e: tetmesh.edges())
+        {
+            auto vs = tetmesh.edge_vertices(e);
+            auto eNew = inputMesh.add_edge(m_vertexLocal[vs[0].idx()], m_vertexLocal[vs[1].idx()]);
+            m_edgeLocal[e.idx()] = eNew;
+        }
+
+        for (auto f: tetmesh.faces())
+        {
+            std::vector<VertexHandle> vs;
+            for (auto v: tetmesh.get_halfface_vertices(tetmesh.halfface_handle(f, 0)))
+                vs.push_back(m_vertexLocal[v.idx()]);
+            auto fNew = inputMesh.add_face(vs);
+            m_faceLocal[f.idx()] = fNew;
         }
 
         // add tets
@@ -138,6 +171,21 @@ class TrulySeamless3D : public HexExtractor
         for (auto ch : inputMesh.cells())
             cellVertices[ch] = inputMesh.get_cell_vertices(ch);
         init();
+    }
+
+    void setFeature(FaceHandle orig_face)
+    {
+        m_faceFeature[m_faceLocal[orig_face.idx()]] = true;
+    }
+
+    void setFeature(EdgeHandle orig_edge)
+    {
+        m_edgeFeature[m_edgeLocal[orig_edge.idx()]] = true;
+    }
+
+    void setFeature(VertexHandle orig_vertex)
+    {
+        m_vertexFeature[m_vertexLocal[orig_vertex.idx()]] = true;
     }
 
     void setParam(CellHandle orig_cell, VertexHandle orig_vertex, const Parameter& param)
