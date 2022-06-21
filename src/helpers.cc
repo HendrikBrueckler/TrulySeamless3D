@@ -1,4 +1,4 @@
-#include "TrulySeamless3D/helpers.h"
+#include "TS3D/helpers.h"
 
 #include <math.h>
 #include <stack>

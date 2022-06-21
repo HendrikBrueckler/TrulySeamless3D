@@ -1,13 +1,10 @@
 cmake_minimum_required(VERSION 3.1)
 
+project(TS3D VERSION 1.0)
+
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 include(macrOS)
-
-project(TrulySeamless3D VERSION 1.0)
-
-### Default to C++17
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
+include(GNUInstallDirs)
 
 ### Require out-of-source builds
 file(TO_CMAKE_PATH "${PROJECT_BINARY_DIR}/CMakeLists.txt" LOC_PATH)
@@ -26,31 +23,53 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   "Debug" "Release" "RelWithDebInfo")
 endif()
 
-### Binary output
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Build/lib/)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Build/lib/)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Build/bin/)
-
 ### Standalone?
-if(${CMAKE_PROJECT_NAME} STREQUAL ${PROJECT_NAME})
+if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
     set(TS3D_STANDALONE TRUE)
+    message("Configuring TS3D as standalone project...")
 else()
     set(TS3D_STANDALONE FALSE)
+    message("Configuring TS3D inside another cmake project...")
 endif()
 
 ### Options
 option(TS3D_BUILD_CLI         "Build CLI app for TrulySeamless3D" ${TS3D_STANDALONE})
 option(TS3D_ENABLE_LOGGING    "Allow logging of TrulySeamless3D"  ${TS3D_STANDALONE})
 option(TS3D_SUBMODULES_MANUAL "Skip automatic submodule download" OFF)
+option(BUILD_SHARED_LIBS      "Build libraries as shared as opposed to static" ON)
+
+### Global cmake settings
+set(CMAKE_CXX_STANDARD 17)
+set(CXX_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+set(CMAKE_C_EXTENSIONS OFF)
+set(CMAKE_CXX_EXTENSIONS OFF)
+if (TS3D_STANDALONE)
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}")
+endif()
 
 ### Load external libs
-add_subdirectory(extern)
+if(NOT ${TS3D_SUBMODULES_MANUAL})
+    add_subdirectory(extern)
+endif()
 
 ### Add own lib
-set(TS3D_LIB_NAME trulyseamless3d)
+# lib target: TS3D::TS3D
 add_subdirectory(src)
 
 ### Add CLI
 if (TS3D_BUILD_CLI)
     add_subdirectory(cli)
+endif()
+
+### Fake successful finder run if compiling as a dependent project.
+if (NOT TS3D_STANDALONE)
+    set(TS3D_FOUND true PARENT_SCOPE)
+    set(TS3D_LIBRARIES TS3D PARENT_SCOPE)
+    set(TS3D_LIBRARY TS3D PARENT_SCOPE)
+    set(TS3D_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/include/" PARENT_SCOPE)
+    set(TS3D_LIBRARY_DIR "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}" CACHE PATH "The directory where the TS3D libraries can be found.")
 endif()

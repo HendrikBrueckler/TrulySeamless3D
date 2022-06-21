@@ -4,9 +4,9 @@
 
 #include <list>
 
-#include "TrulySeamless3D/helpers.h"
-#include "TrulySeamless3D/timer.h"
-#include "TrulySeamless3D/trulyseamless.h"
+#include "TS3D/helpers.h"
+#include "TS3D/timer.h"
+#include "TS3D/trulyseamless.h"
 #include <Eigen/Dense>
 
 const double M = 1000000000;

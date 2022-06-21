@@ -1,4 +1,4 @@
-#include "TrulySeamless3D/timer.h"
+#include "TS3D/timer.h"
 
 double subtractTimes(std::chrono::high_resolution_clock::time_point& t_end,
                      std::chrono::high_resolution_clock::time_point& t_start)

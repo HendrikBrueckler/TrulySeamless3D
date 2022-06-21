@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "TrulySeamless3D/trulyseamless.h"
+#include "TS3D/trulyseamless.h"
 
 int main(int argc, char** argv)
 {
