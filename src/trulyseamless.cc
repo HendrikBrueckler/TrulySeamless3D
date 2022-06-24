@@ -331,6 +331,13 @@ void TrulySeamless3D::calculateEdgeSingularities()
     edgeSingularitiesCalculated = true;
 }
 
+bool TrulySeamless3D::isSingularEdge(EdgeHandle eh)
+{
+    if (!edgeSingularitiesCalculated)
+        calculateEdgeSingularities();
+    return edgeSingularity[eh];
+}
+
 template <class T>
 void TrulySeamless3D::resizeVec(std::vector<T>& A)
 {
@@ -545,7 +552,7 @@ void TrulySeamless3D::markSheets()
 
         if (inputMesh.is_boundary(*f_it)) // alignment Sheets
         {
-            if (!m_withBoundaryAlignment)
+            if (!m_withBoundaryAlignment && !m_faceFeature[*f_it])
                 continue;
 
             m_sheet[*f_it] = -1;
@@ -627,7 +634,7 @@ void TrulySeamless3D::markBranches()
             if (-1 == m_sheet[fh])
             {
                 sheet_count++;
-                if (inputMesh.is_boundary(fh))
+                if (inputMesh.is_boundary(fh) || m_faceFeature[fh])
                     alignments.insert(m_alignmentType[fh]);
             }
         }
@@ -668,27 +675,29 @@ void TrulySeamless3D::markNodes()
     for (auto v_it = inputMesh.vertices_begin(); v_it != inputMesh.vertices_end(); ++v_it)
     {
         m_node[*v_it] = false;
-        int is_node = 0;
+        int n_branches = 0;
         bool singularity_branch = false;
         bool non_singularity_branch = false;
         int internal_branches = 0;
         std::set<int> alignments;
         for (auto voh_it = inputMesh.voh_iter(*v_it); voh_it.valid(); ++voh_it)
         {
-            if (-1 == m_branches[inputMesh.edge_handle(*voh_it)])
+            auto e = inputMesh.edge_handle(*voh_it);
+            if (-1 == m_branches[e])
             {
-                is_node++;
-                if (isSingularEdge(inputMesh.edge_handle(*voh_it)))
+                n_branches++;
+                if (isSingularEdge(e))
                     singularity_branch = true;
                 else
                     non_singularity_branch = true;
                 if (inputMesh.is_boundary(*v_it) && !inputMesh.is_boundary(*voh_it))
                     internal_branches++;
-                alignments.insert(m_branchType[inputMesh.edge_handle(*voh_it)]);
+                if (m_edgeFeature[e] && !isSingularEdge(e))
+                    alignments.insert(m_branchType[e]);
             }
         }
 
-        if (1 == is_node || is_node > 2 || (singularity_branch && non_singularity_branch) || internal_branches > 0
+        if (1 == n_branches || n_branches > 2 || (singularity_branch && non_singularity_branch) || internal_branches > 0
             || alignments.size() > 1)
         {
             node_count++;
@@ -1038,8 +1047,8 @@ void TrulySeamless3D::computeSeamlessnessVariables()
     int sheets_ignored = 0;
     for (unsigned int i = 0; i < m_sheetNodeSectors.size(); i++)
     {
-        std::vector<int>& sheet = m_sheetNodeSectors[i];
-        if (sheet.size() < 2)
+        std::vector<int>& nodeSectors = m_sheetNodeSectors[i];
+        if (nodeSectors.size() < 2)
         {
             sheets_ignored++;
             continue;
@@ -1047,42 +1056,82 @@ void TrulySeamless3D::computeSeamlessnessVariables()
         auto hf = m_sheetType[i];
         auto f = inputMesh.face_handle(hf);
 
-        Vec3i u0_p(3 * sheet[0], 3 * sheet[0] + 1, 3 * sheet[0] + 2);
-
-        int is_align = m_alignmentType[f];
-        if (is_align > SHEET_NONE)
+        int alignmentCoord = m_alignmentType[f];
+        if (alignmentCoord > SHEET_NONE)
         {
-            for (unsigned int j = 1; j < sheet.size(); j++)
+            for (unsigned int j = 1; j < nodeSectors.size(); j++)
             {
-                triplets.push_back(Triplets_int(eq, u0_p[is_align], 1));
-                triplets.push_back(Triplets_int(eq, 3 * sheet[j] + is_align, -1));
+                triplets.push_back(Triplets_int(eq, 3 * nodeSectors[0] + alignmentCoord, 1));
+                triplets.push_back(Triplets_int(eq, 3 * nodeSectors[j] + alignmentCoord, -1));
                 eq++;
             }
         }
         else // cut sheet
         {
             // EQUATION: - pi*u0_p + u0_n + pi*uj_p - uj_n = 0
-            Vec3i u0_n(3 * sheet[1], 3 * sheet[1] + 1, 3 * sheet[1] + 2);
 
             Vec3i inv, ids(1, 2, 3);
             transformID(ids, inv, transitionFunctions[hf]);
 
-            for (unsigned int j = 2; j < sheet.size(); j++)
+            for (unsigned int j = 2; j < nodeSectors.size(); j += 2)
             {
-                Vec3i uj_p(3 * sheet[j], 3 * sheet[j] + 1, 3 * sheet[j] + 2);
-                j++;
-                Vec3i uj_n(3 * sheet[j], 3 * sheet[j] + 1, 3 * sheet[j] + 2);
-
                 for (int k = 0; k < 3; k++)
                 {
-                    triplets.push_back(Triplets_int(eq, u0_p[ids[k]], -1 * inv[k]));
-                    triplets.push_back(Triplets_int(eq, u0_n[k], 1));
-                    triplets.push_back(Triplets_int(eq, uj_p[ids[k]], 1 * inv[k]));
-                    triplets.push_back(Triplets_int(eq, uj_n[k], -1));
+                    triplets.push_back(Triplets_int(eq, 3 * nodeSectors[0] + ids[k], -1 * inv[k]));
+                    triplets.push_back(Triplets_int(eq, 3 * nodeSectors[1] + k, 1));
+                    triplets.push_back(Triplets_int(eq, 3 * nodeSectors[j] + ids[k], 1 * inv[k]));
+                    triplets.push_back(Triplets_int(eq, 3 * nodeSectors[j + 1] + k, -1));
                     eq++;
                 }
             }
         }
+    }
+
+    std::vector<std::vector<VertexHandle>> featureBranchEndpoints(m_branchID);
+    std::vector<std::vector<EdgeHandle>> featureBranchEndEdges(m_branchID);
+    for (auto v : inputMesh.vertices())
+        if (m_node[v])
+            for (auto e : inputMesh.vertex_edges(v))
+                if (m_edgeFeature[e] && !isSingularEdge(e))
+                {
+                    assert(m_branches[e] > -1);
+                    featureBranchEndpoints[m_branches[e]].emplace_back(v);
+                    featureBranchEndEdges[m_branches[e]].emplace_back(e);
+                }
+
+    for (int i = 0; i < m_branchID; i++)
+    {
+        assert(featureBranchEndpoints[i].size() == 0 || featureBranchEndpoints[i].size() == 2);
+        assert(featureBranchEndEdges[i].size() == 0 || featureBranchEndEdges[i].size() == 2);
+        if (featureBranchEndEdges[i].size() == 0)
+            continue;
+
+        auto v1 = featureBranchEndpoints[i].front();
+        auto v2 = featureBranchEndpoints[i].back();
+        auto e1 = featureBranchEndEdges[i].front();
+        auto e2 = featureBranchEndEdges[i].back();
+        int alignment1 = m_branchType[e1];
+        assert(alignment1 == m_branchType[e2]);
+        assert(alignment1 > BRANCH_NONE);
+
+        int sector1 = m_nodeSector[*inputMesh.ec_iter(e1)][v1];
+        int sector2 = m_nodeSector[*inputMesh.ec_iter(e2)][v2];
+
+        assert(sector1 < m_nodeSectorCount);
+        assert(sector2 < m_nodeSectorCount);
+        assert(sector1 > 0);
+        assert(sector2 > 0);
+        assert(sector1 != sector2);
+
+        int alignCoord1 = (alignment1 + 1) % 3;
+        int alignCoord2 = (alignment1 + 2) % 3;
+
+        triplets.push_back(Triplets_int(eq, 3 * sector1 + alignCoord1, 1));
+        triplets.push_back(Triplets_int(eq, 3 * sector2 + alignCoord1, -1));
+        eq++;
+        triplets.push_back(Triplets_int(eq, 3 * sector1 + alignCoord2, 1));
+        triplets.push_back(Triplets_int(eq, 3 * sector2 + alignCoord2, -1));
+        eq++;
     }
 
     // rows: number of equations
@@ -1641,7 +1690,7 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
     // Fill alignment constraints along the branches
     for (auto e_it = inputMesh.edges_begin(); e_it != inputMesh.edges_end(); ++e_it)
     {
-        if (-2 == m_branches[*e_it] || !inputMesh.is_boundary(*e_it))
+        if (-2 == m_branches[*e_it] || !inputMesh.is_boundary(*e_it) || (!isSingularEdge(*e_it) && m_edgeFeature[*e_it]))
             continue;
 
         // If Both vertices already filled then continue
@@ -1804,7 +1853,10 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
             if (branch_id < 0 || branch_processed[branch_id])
                 continue;
             branch_processed[branch_id] = true;
-            if (branch_edge_count[branch_id] < 2 || inputMesh.is_boundary(e))
+            if (branch_edge_count[branch_id] < 2)
+                continue;
+
+            if (inputMesh.is_boundary(e) && (isSingularEdge(e) || !m_edgeFeature[e]))
                 continue;
 
             std::vector<HalfFaceHandle> sheet_loop = getSheetLoop(inputMesh.halfedge_handle(e, 0));
@@ -1818,7 +1870,7 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
                 tranFun = tranFun * TT;
             }
 
-            if (tranFun == identity)
+            if (tranFun == identity && !m_edgeFeature[e])
                 continue;
 
             // Trace this branch sector by sector
@@ -1951,7 +2003,7 @@ bool TrulySeamless3D::checkSeamlessness()
         auto hf1 = inputMesh.halfface_handle(*f_it, 0);
         auto hf2 = inputMesh.opposite_halfface_handle(hf1);
 
-        if (inputMesh.is_boundary(*f_it))
+        if (inputMesh.is_boundary(*f_it) || m_faceFeature[*f_it])
         {
             f_align++;
             if (inputMesh.is_boundary(hf1)) // Get Non border half-face

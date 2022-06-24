@@ -221,6 +221,7 @@ class TrulySeamless3D : public HexExtractor
 
     void calculateEdgeSingularity(EdgeHandle eh);
     void calculateEdgeSingularities();
+    bool isSingularEdge(EdgeHandle eh);
 
     void doTransition(HalfFaceHandle hfh, CellHandle& ch);
     void doTransition(HalfFaceHandle hfh, std::vector<Parameter>& params);
