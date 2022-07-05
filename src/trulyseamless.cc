@@ -1119,8 +1119,8 @@ void TrulySeamless3D::computeSeamlessnessVariables()
 
         assert(sector1 < m_nodeSectorCount);
         assert(sector2 < m_nodeSectorCount);
-        assert(sector1 > 0);
-        assert(sector2 > 0);
+        assert(sector1 >= 0);
+        assert(sector2 >= 0);
         assert(sector1 != sector2);
 
         int alignCoord1 = (alignment1 + 1) % 3;
