@@ -69,7 +69,8 @@ TrulySeamless3D::TrulySeamless3D()
       m_vertexUpdated(inputMesh.request_vertex_property<bool>()),
       m_orientationType(inputMesh.request_halfface_property<bool>()),
       m_alignmentType(inputMesh.request_face_property<SheetType>()),
-      m_branchType(inputMesh.request_edge_property<BranchType>()), m_sheet(inputMesh.request_face_property<int>()),
+      m_branchType(inputMesh.request_edge_property<BranchType>()),
+      m_branchCell(inputMesh.request_edge_property<CellHandle>()), m_sheet(inputMesh.request_face_property<int>()),
       m_branches(inputMesh.request_edge_property<int>()), m_node(inputMesh.request_vertex_property<bool>()),
       m_nodeSector(inputMesh.request_cell_property<VertexMapProp<int>>()),
       m_cellVisitedCheck(inputMesh.request_cell_property<VertexMapProp<bool>>()),
@@ -648,11 +649,11 @@ void TrulySeamless3D::markBranches()
         if (-1 == m_branches[e])
         {
             m_branchType[e] = BRANCH_NONE;
+            m_branchCell[e] = *inputMesh.ec_iter(e);
 
-            auto ch = *inputMesh.ec_iter(e);
             auto vertices = inputMesh.edge_vertices(e);
-            auto a = parameter(ch, vertices[0]);
-            auto b = parameter(ch, vertices[1]);
+            auto a = parameter(m_branchCell[e], vertices[0]);
+            auto b = parameter(m_branchCell[e], vertices[1]);
             auto error = absolute(b - a); // direction for minimum alignment error
             for (int i = 0; i < 3; i++)
             {
@@ -680,6 +681,35 @@ void TrulySeamless3D::markNodes()
         bool non_singularity_branch = false;
         int internal_branches = 0;
         std::set<int> alignments;
+
+        std::set<CH> tets;
+        for (auto tet : inputMesh.vertex_cells(*v_it))
+            tets.insert(tet);
+        std::map<CH, Transition> tet2rotation;
+        std::list<std::pair<CH, Transition>> tetQ;
+        auto tetSeed = *tets.begin();
+        tet2rotation.insert({tetSeed, Transition()});
+        tetQ.push_back({tetSeed, Transition()});
+
+        while (!tetQ.empty())
+        {
+            auto tetRotation = tetQ.front();
+            tetQ.pop_front();
+
+            for (auto hf : inputMesh.cell_halffaces(tetRotation.first))
+            {
+                auto tetNext = inputMesh.incident_cell(inputMesh.opposite_halfface_handle(hf));
+                if (!tetNext.is_valid() || tets.count(tetNext) == 0 || tet2rotation.count(tetNext) != 0)
+                    continue;
+
+                Transition rotationNext
+                    = Transition(transitionFunctions[hf].toMatrix() * tetRotation.second.toMatrix());
+                rotationNext.setTranslation(Vec3d(0, 0, 0));
+                tetQ.push_back({tetNext, rotationNext});
+                tet2rotation.insert({tetNext, rotationNext});
+            }
+        }
+
         for (auto voh_it = inputMesh.voh_iter(*v_it); voh_it.valid(); ++voh_it)
         {
             auto e = inputMesh.edge_handle(*voh_it);
@@ -693,10 +723,20 @@ void TrulySeamless3D::markNodes()
                 if (inputMesh.is_boundary(*v_it) && !inputMesh.is_boundary(*voh_it))
                     internal_branches++;
                 if (m_edgeFeature[e] && !isSingularEdge(e))
-                    alignments.insert(m_branchType[e]);
+                {
+                    int alignment = m_branchType[e];
+                    Vec3d in(0, 0, 0);
+                    in[alignment] = 1;
+                    Vec3d out = tet2rotation.at(m_branchCell[e]).inverted().transform_vector(in);
+                    for (int coord = 0; coord < 3; coord++)
+                        if (out[coord] != 0)
+                            alignment = coord;
+                    alignments.insert(alignment);
+                }
             }
         }
 
+        // To debug: mark all feature vs as nodes
         if (1 == n_branches || n_branches > 2 || (singularity_branch && non_singularity_branch) || internal_branches > 0
             || alignments.size() > 1)
         {
@@ -1111,11 +1151,67 @@ void TrulySeamless3D::computeSeamlessnessVariables()
         auto e1 = featureBranchEndEdges[i].front();
         auto e2 = featureBranchEndEdges[i].back();
         int alignment1 = m_branchType[e1];
-        assert(alignment1 == m_branchType[e2]);
-        assert(alignment1 > BRANCH_NONE);
+        auto cell1 = m_branchCell[e1];
+        auto cell2 = m_branchCell[e2];
 
-        int sector1 = m_nodeSector[*inputMesh.ec_iter(e1)][v1];
-        int sector2 = m_nodeSector[*inputMesh.ec_iter(e2)][v2];
+        bool onSheet = false;
+        for (auto f : inputMesh.edge_faces(e1))
+            if (m_sheet[f] > -1)
+            {
+                onSheet = true;
+                break;
+            }
+        if (onSheet)
+        {
+            set<CellHandle> tetVisited({cell1});
+            list<CellHandle> tetQ({cell1});
+
+            while (!tetQ.empty())
+            {
+                auto tet = tetQ.front();
+                tetQ.pop_front();
+
+                for (auto hf : inputMesh.cell_halffaces(tet))
+                {
+                    if (m_sheet[inputMesh.face_handle(hf)] > -1)
+                        continue;
+                    auto tetNext = inputMesh.incident_cell(inputMesh.opposite_halfface_handle(hf));
+                    if (!tetNext.is_valid() || tetVisited.count(tetNext) != 0)
+                        continue;
+                    bool onBranch = false;
+                    for (auto v : inputMesh.cell_vertices(tetNext))
+                    {
+                        for (auto e : inputMesh.vertex_edges(v))
+                        {
+                            if (m_branches[e] == i)
+                            {
+                                onBranch = true;
+                                break;
+                            }
+                        }
+                        if (onBranch)
+                            break;
+                    }
+                    if (!onBranch)
+                        continue;
+                    tetQ.push_back(tetNext);
+                    tetVisited.insert(tetNext);
+                }
+            }
+            bool found = false;
+            for (auto tet : inputMesh.edge_cells(e2))
+                if (tetVisited.count(tet) != 0)
+                {
+                    found = true;
+                    cell2 = tet;
+                    break;
+                }
+            if (!found)
+                throw std::logic_error("Branch start end sectors not connected");
+        }
+
+        int sector1 = m_nodeSector[cell1][v1];
+        int sector2 = m_nodeSector[cell2][v2];
 
         assert(sector1 < m_nodeSectorCount);
         assert(sector2 < m_nodeSectorCount);
@@ -1690,7 +1786,8 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
     // Fill alignment constraints along the branches
     for (auto e_it = inputMesh.edges_begin(); e_it != inputMesh.edges_end(); ++e_it)
     {
-        if (-2 == m_branches[*e_it] || !inputMesh.is_boundary(*e_it) || (!isSingularEdge(*e_it) && m_edgeFeature[*e_it]))
+        if (-2 == m_branches[*e_it] || !inputMesh.is_boundary(*e_it)
+            || (!isSingularEdge(*e_it) && m_edgeFeature[*e_it]))
             continue;
 
         // If Both vertices already filled then continue
@@ -1963,7 +2060,7 @@ int TrulySeamless3D::orientationCount()
     std::cout << "Mesh Info: " << inverted << " inverted and " << degen
               << " degenerate cells with volume min = " << min_volume << " max = " << max_volume << std::endl;
 #endif
-    return degen;
+    return degen + inverted;
 }
 
 std::pair<int, int> TrulySeamless3D::identityTransitionCount()
@@ -1993,9 +2090,6 @@ bool TrulySeamless3D::checkSeamlessness()
     int bad_alignment = 0;
     int bad_cut = 0;
     int bad_identity = 0;
-
-    std::vector<HalfFaceHandle> vec_bad_faces;
-    std::set<int> vec_sheets;
 
     std::set<VertexHandle> error_vset;
     for (auto f_it = inputMesh.faces_begin(); f_it != inputMesh.faces_end(); ++f_it)
@@ -2109,11 +2203,58 @@ bool TrulySeamless3D::checkSeamlessness()
     printf("\nMax change in Parametrization = %f\n", diff);
 #endif
 
+    int e_singularAlign = 0;
+    int e_featureAlign = 0;
+    int bad_singularAlign = 0;
+    int bad_featureAlign = 0;
+
+    for (auto e : inputMesh.edges())
+    {
+        if (m_edgeFeature[e] || isSingularEdge(e))
+        {
+            if (isSingularEdge(e))
+                e_singularAlign++;
+            else
+                e_featureAlign++;
+
+            auto vs = inputMesh.edge_vertices(e);
+            for (auto c : inputMesh.edge_cells(e))
+            {
+                Vec3d a = parameter(c, vs[0]);
+                Vec3d b = parameter(c, vs[1]);
+                bool edge_aligned = (a[0] == b[0] && (a[1] == b[1] || a[2] == b[2])) || (a[1] == b[1] && a[2] == b[2]);
+
+                if (!edge_aligned)
+                {
+                    if (isSingularEdge(e))
+                        bad_singularAlign++;
+                    else
+                    {
+                        // std::cout << "Feature edge " << e << " misaligned: " << a - b << endl;
+                        bad_featureAlign++;
+                    }
+                    v_count += 2;
+                    break;
+                }
+                else
+                {
+                    if (!isSingularEdge(e))
+                    {
+                        // std::cout << "Feature edge " << e << " well aligned: " << a - b << endl;
+                    }
+                }
+            }
+        }
+    }
+
     if (0 != v_count)
     {
 #ifndef TRULYSEAMLESS_SILENT
         std::cout << "Total Alignment Faces: " << f_align << " and cut Faces = " << f_cut << " and identity "
                   << f_identity << endl;
+        std::cout << "Total singular Edges: " << e_singularAlign << " and feature edges: " << e_featureAlign << endl;
+        std::cout << "ERROR: Misaligned singular edges: " << bad_singularAlign << endl;
+        std::cout << "ERROR: Misaligned feature edges: " << bad_featureAlign << endl;
         std::cout << "ERROR: Alignment Faces: " << bad_alignment << endl;
         std::cout << "ERROR: " << v_count << " vertices not seamless across " << bad_cut << " cut faces and "
                   << bad_identity << " identity faces\n"
@@ -2193,7 +2334,7 @@ bool TrulySeamless3D::sanitize(double perturb, bool keepOriginalTransitions)
     if (orientationCount() > 0)
     {
 #ifndef TRULYSEAMLESS_SILENT
-        std::cout << "ERROR: Algorithm cannot work with degenerate faces" << endl;
+        std::cout << "ERROR: Algorithm cannot work with flipped or degenerate tets" << endl;
 #endif
         return false;
     }

@@ -62,6 +62,7 @@ class TrulySeamless3D : public HexExtractor
     // Sheet Info
     FaceProperty<SheetType> m_alignmentType; // u, v or w : 0,1,2
     EdgeProperty<BranchType> m_branchType; // u, v or w : 0,1,2
+    EdgeProperty<CellHandle> m_branchCell; // u, v or w : 0,1,2
     FaceProperty<int> m_sheet;               //-2 -> usual face, >=0 -> correspoing sheet id
     EdgeProperty<int> m_branches;
     VertexProperty<bool> m_node;
