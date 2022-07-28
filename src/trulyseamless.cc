@@ -1487,6 +1487,8 @@ std::vector<HalfFaceHandle> TrulySeamless3D::getSheetLoop(HalfEdgeHandle he)
         if (inputMesh.is_boundary(hf_start))
             break;
     }
+    if (!hf_start.is_valid())
+        return sheet_loop;
     hf_start = inputMesh.opposite_halfface_handle(hf_start); // not pointing to boundary
     sheet_loop.push_back(hf_start);
 
@@ -1972,12 +1974,25 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
 
             // Trace this branch sector by sector
             bool fixed_axis = false;
-            for (auto sheet_f : sheet_loop)
+            if (sheet_loop.empty())
             {
-                if (fillBranchAxis(*v_it, sheet_f, branch_vertices[branch_id]))
+                for (auto hf: inputMesh.halfedge_halffaces(inputMesh.halfedge_handle(e, 0)))
+                    if (fillBranchAxis(
+                            *v_it, hf, branch_vertices[branch_id]))
+                    {
+                        fixed_axis = true;
+                        break;
+                    }
+            }
+            else
+            {
+                for (auto sheet_f : sheet_loop)
                 {
-                    fixed_axis = true;
-                    break;
+                    if (fillBranchAxis(*v_it, sheet_f, branch_vertices[branch_id]))
+                    {
+                        fixed_axis = true;
+                        break;
+                    }
                 }
             }
 
