@@ -79,7 +79,7 @@ set_target_properties(TS3D PROPERTIES
                       CXX_STANDARD 17
                       CXX_STANDARD_REQUIRED ON)
 # compile options
-list(APPEND TS3D_COMPILE_OPTIONS_PRV "-Wall" "-Wextra" "-Werror" "-Wshadow" "-Wunused" "-Wunused-function")
+list(APPEND TS3D_COMPILE_OPTIONS_PRV "-Wall" "-Wextra" "-Wshadow" "-Wunused" "-Wunused-function")
 target_compile_options(TS3D PRIVATE ${TS3D_COMPILE_OPTIONS_PRV})
 # preprocessor defines
 if (NOT ${TS3D_ENABLE_LOGGING})
