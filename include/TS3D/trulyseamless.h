@@ -36,7 +36,7 @@ class TrulySeamless3D : public HexExtractor
         SHEET_NONE = -1,
         SHEET_ALIGNX = 0,
         SHEET_ALIGNY = 1,
-        SHEET_ALIGNZ = 2
+        SHEET_ALIGNZ = 2,
     };
 
     enum BranchType
@@ -181,7 +181,7 @@ class TrulySeamless3D : public HexExtractor
 
     void setFeature(EdgeHandle orig_edge)
     {
-        m_edgeFeature[m_edgeLocal[orig_edge.idx()]] = true;
+        m_edgeFeature[m_edgeLocal[orig_edge.idx()]] = false;
     }
 
     void setFeature(VertexHandle orig_vertex)
