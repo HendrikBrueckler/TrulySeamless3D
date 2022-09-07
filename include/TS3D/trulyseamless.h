@@ -181,7 +181,7 @@ class TrulySeamless3D : public HexExtractor
 
     void setFeature(EdgeHandle orig_edge)
     {
-        m_edgeFeature[m_edgeLocal[orig_edge.idx()]] = false;
+        m_edgeFeature[m_edgeLocal[orig_edge.idx()]] = true;
     }
 
     void setFeature(VertexHandle orig_vertex)
