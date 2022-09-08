@@ -711,9 +711,27 @@ void TrulySeamless3D::markNodes()
             }
         }
 
+        bool hasFeatureBranch = false;
+        bool hasAlignedSheet = false;
+        bool hasCutSheet = false;
+        set<FH> sheetFaces;
+        set<int> nSheetFaces;
         for (auto voh_it = inputMesh.voh_iter(*v_it); voh_it.valid(); ++voh_it)
         {
             auto e = inputMesh.edge_handle(*voh_it);
+            int n = 0;
+            for (auto f : inputMesh.edge_faces(e))
+                if (m_sheet[f] > -2)
+                {
+                    if (m_alignmentType[f] > -1)
+                        hasAlignedSheet = true;
+                    else
+                        hasCutSheet = true;
+                    sheetFaces.insert(f);
+                    n++;
+                }
+            nSheetFaces.insert(n);
+
             if (-1 == m_branches[e])
             {
                 n_branches++;
@@ -721,6 +739,8 @@ void TrulySeamless3D::markNodes()
                     singularity_branch = true;
                 else
                     non_singularity_branch = true;
+                if (m_edgeFeature[e])
+                    hasFeatureBranch = true;
                 if (inputMesh.is_boundary(*v_it) && !inputMesh.is_boundary(*voh_it))
                     internal_branches++;
                 if (m_edgeFeature[e] && !isSingularEdge(e))
@@ -740,6 +760,18 @@ void TrulySeamless3D::markNodes()
         // To debug: mark all feature vs as nodes
         if (1 == n_branches || n_branches > 2 || (singularity_branch && non_singularity_branch) || internal_branches > 0
             || alignments.size() > 1)
+        {
+            node_count++;
+            markNode(*v_it);
+        }
+        // TODO this may still be overly strict, test
+        else if (!inputMesh.is_boundary(*v_it) && hasAlignedSheet && hasCutSheet && n_branches == 0)
+        {
+            node_count++;
+            markNode(*v_it);
+        }
+        // TODO this may be overly strict (or possibly not strict enough), test
+        else if (!inputMesh.is_boundary(*v_it) && hasFeatureBranch && nSheetFaces.size() > 1)
         {
             node_count++;
             markNode(*v_it);
@@ -1179,6 +1211,51 @@ void TrulySeamless3D::computeSeamlessnessVariables()
                 onSheet = true;
                 break;
             }
+#ifndef NDEBUG
+        bool onSheet2 = false;
+        for (auto f : inputMesh.edge_faces(e2))
+            if (m_sheet[f] > -1)
+            {
+                onSheet2 = true;
+                break;
+            }
+        assert(onSheet2 == onSheet);
+
+        set<EH> eVisited({e1});
+        list<EH> es({e1});
+        bool foundNext = true;
+        while (foundNext)
+        {
+            foundNext = false;
+            for (auto v : inputMesh.edge_vertices(es.back()))
+            {
+                if (foundNext)
+                    break;
+                for (auto e : inputMesh.vertex_edges(v))
+                    if (eVisited.count(e) == 0 && m_branches[e] == i)
+                    {
+                        eVisited.insert(e);
+                        es.push_back(e);
+                        foundNext = true;
+                        break;
+                    }
+            }
+        }
+        set<int> sheetsCheck;
+        for (auto f : inputMesh.edge_faces(e1))
+            if (m_sheet[f] > -1)
+                sheetsCheck.insert(m_sheet[f]);
+        for (auto e : es)
+        {
+            set<int> sheets;
+            for (auto f : inputMesh.edge_faces(e))
+                if (m_sheet[f] > -1)
+                    sheets.insert(m_sheet[f]);
+            if (sheets != sheetsCheck)
+                debugExportBranch(i);
+            assert(sheets == sheetsCheck);
+        }
+#endif
         if (onSheet)
         {
             set<CellHandle> tetVisited({cell1});
@@ -2161,15 +2238,6 @@ bool TrulySeamless3D::checkSeamlessness()
             }
             if (!face_aligned)
             {
-                std::set<int> sheet;
-                for (int i = 0; i < 3; i++)
-                {
-                    for (auto s_it = inputMesh.vf_iter(vx[i]); s_it.valid(); ++s_it)
-                    {
-                        if (m_sheet[*s_it] >= 0)
-                            sheet.insert(m_sheet[*s_it]);
-                    }
-                }
                 bad_alignment++;
                 v_count += 3;
             }
