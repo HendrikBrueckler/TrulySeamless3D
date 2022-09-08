@@ -9,6 +9,8 @@
 #include "TS3D/trulyseamless.h"
 #include <Eigen/Dense>
 
+#include <OpenVolumeMesh/FileManager/FileManager.hh>
+
 const double M = 1000000000;
 
 namespace TS3D
@@ -2425,6 +2427,192 @@ bool TrulySeamless3D::sanitize(double perturb, bool keepOriginalTransitions)
 #endif
 
     return (checkSeamlessness() && orientationCount() == 0);
+}
+
+void TrulySeamless3D::debugExportFace(const FaceHandle& f) const
+{
+    // Export face itself
+    exportOVMFile({f});
+
+    // Export nodes
+    set<VH> nodes;
+    for (auto v : inputMesh.face_vertices(f))
+        if (m_node[v])
+            nodes.insert(v);
+    if (!nodes.empty())
+        exportOVMFile(nodes);
+
+    // Gather and export all branches
+    set<int> branches;
+    for (auto v : inputMesh.face_vertices(f))
+        for (auto e : inputMesh.vertex_edges(v))
+            if (m_branches[e] > -1)
+                branches.insert(m_branches[e]);
+    for (auto branch : branches)
+    {
+        set<EH> otherEdges;
+        for (auto e : inputMesh.edges())
+            if (m_branches[e] == branch)
+                otherEdges.insert(e);
+        exportOVMFile(otherEdges);
+    }
+
+    // Gather and export all sheets incident on branch
+    set<int> sheets;
+    for (auto v : inputMesh.face_vertices(f))
+        for (auto f2 : inputMesh.vertex_faces(v))
+            if (m_sheet[f2] > -1 && sheets.count(m_sheet[f2]) == 0)
+                sheets.insert(m_sheet[f2]);
+    for (auto sheet : sheets)
+    {
+        set<FH> faces;
+        for (auto e : inputMesh.faces())
+            if (m_sheet[e] == sheet)
+                faces.insert(e);
+        exportOVMFile(faces);
+    }
+}
+
+void TrulySeamless3D::debugExportBranch(int branchID) const
+{
+    set<EH> edges;
+    for (auto e : inputMesh.edges())
+        if (m_branches[e] == branchID)
+            edges.insert(e);
+
+    // Export branch itself
+    exportOVMFile(edges);
+
+    // Export nodes
+    set<VH> nodes;
+    for (auto e : edges)
+        for (auto v : inputMesh.edge_vertices(e))
+            if (m_node[v])
+                nodes.insert(v);
+    exportOVMFile(nodes);
+
+    // Gather and export all other branches branching off this branch
+    set<int> otherBranches;
+    for (auto e1 : edges)
+        for (auto v : inputMesh.edge_vertices(e1))
+            for (auto e2 : inputMesh.vertex_edges(v))
+                if (m_branches[e2] > -1 && m_branches[e2] != branchID)
+                    otherBranches.insert(m_branches[e2]);
+    for (auto branch : otherBranches)
+    {
+        set<EH> otherEdges;
+        for (auto e : inputMesh.edges())
+            if (m_branches[e] == branch)
+                otherEdges.insert(e);
+        exportOVMFile(otherEdges);
+    }
+
+    // Gather and export all sheets incident on branch
+    set<int> sheets;
+    for (auto e : edges)
+        for (auto v : inputMesh.edge_vertices(e))
+            for (auto f : inputMesh.vertex_faces(v))
+                if (m_sheet[f] > -1 && sheets.count(m_sheet[f]) == 0)
+                    sheets.insert(m_sheet[f]);
+    for (auto sheet : sheets)
+    {
+        set<FH> faces;
+        for (auto e : inputMesh.faces())
+            if (m_sheet[e] == sheet)
+                faces.insert(e);
+        exportOVMFile(faces);
+    }
+}
+
+void TrulySeamless3D::exportOVMFile(const set<CH>& cells) const
+{
+    HexEx::TetrahedralMesh exportMesh;
+    std::map<VH, VH> v2vExport;
+    for (auto tet : cells)
+    {
+        std::vector<VH> vs;
+        for (auto v : inputMesh.tet_vertices(tet))
+        {
+            auto vIt = v2vExport.find(v);
+            if (vIt == v2vExport.end())
+            {
+                auto vExport = exportMesh.add_vertex(inputMesh.vertex(v));
+                vs.emplace_back(vExport);
+            }
+            else
+                vs.emplace_back(vIt->second);
+        }
+        exportMesh.add_cell(vs);
+    }
+
+    static int i = 0;
+    OpenVolumeMesh::IO::FileManager f;
+    f.writeFile("./cells" + std::to_string(i++) + ".ovm", exportMesh);
+}
+
+void TrulySeamless3D::exportOVMFile(const set<FH>& faces) const
+{
+    HexEx::TetrahedralMesh exportMesh;
+    std::map<VH, VH> v2vExport;
+    for (auto f : faces)
+    {
+        std::vector<VH> vs;
+        for (auto v : inputMesh.face_vertices(f))
+        {
+            auto vIt = v2vExport.find(v);
+            if (vIt == v2vExport.end())
+            {
+                auto vExport = exportMesh.add_vertex(inputMesh.vertex(v));
+                vs.emplace_back(vExport);
+            }
+            else
+                vs.emplace_back(vIt->second);
+        }
+        exportMesh.add_face(vs);
+    }
+
+    static int i = 0;
+    OpenVolumeMesh::IO::FileManager f;
+    f.writeFile("./faces" + std::to_string(i++) + ".ovm", exportMesh);
+}
+
+void TrulySeamless3D::exportOVMFile(const set<EH>& edges) const
+{
+    HexEx::TetrahedralMesh exportMesh;
+    std::map<VH, VH> v2vExport;
+    for (auto e : edges)
+    {
+        std::vector<VH> vs;
+        for (auto v : inputMesh.edge_vertices(e))
+        {
+            auto vIt = v2vExport.find(v);
+            if (vIt == v2vExport.end())
+            {
+                auto vExport = exportMesh.add_vertex(inputMesh.vertex(v));
+                vs.emplace_back(vExport);
+            }
+            else
+                vs.emplace_back(vIt->second);
+        }
+        exportMesh.add_edge(vs[0], vs[1]);
+    }
+
+    static int i = 0;
+    OpenVolumeMesh::IO::FileManager f;
+    f.writeFile("./edges" + std::to_string(i++) + ".ovm", exportMesh);
+}
+
+void TrulySeamless3D::exportOVMFile(const set<VH>& vertices) const
+{
+    HexEx::TetrahedralMesh exportMesh;
+    for (auto v : vertices)
+    {
+        exportMesh.add_vertex(inputMesh.vertex(v));
+    }
+
+    static int i = 0;
+    OpenVolumeMesh::IO::FileManager f;
+    f.writeFile("./vertices" + std::to_string(i++) + ".ovm", exportMesh);
 }
 
 } // namespace TS3D

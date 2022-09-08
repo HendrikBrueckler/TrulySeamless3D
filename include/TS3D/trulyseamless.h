@@ -279,6 +279,14 @@ class TrulySeamless3D : public HexExtractor
     void fillSector(std::list<HalfFaceHandle> hlist, VertexHandle v, bool skip_filled);
 
     bool checkSeamlessness();
+
+    void debugExportFace(const FaceHandle& f) const;
+    void debugExportBranch(int branchID) const;
+
+    void exportOVMFile(const std::set<CellHandle>& cells) const;
+    void exportOVMFile(const std::set<FaceHandle>& faces) const;
+    void exportOVMFile(const std::set<EdgeHandle>& edges) const;
+    void exportOVMFile(const std::set<VertexHandle>& vertices) const;
 };
 
 } // namespace TS3D
