@@ -49,6 +49,7 @@ class TrulySeamless3D : public HexExtractor
 
   private:
     bool m_failFlag = false;
+    bool m_algorithmFinished = false;
 
     std::string m_fileName;
     bool m_withBoundaryAlignment;

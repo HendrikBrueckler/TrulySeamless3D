@@ -2355,10 +2355,10 @@ bool TrulySeamless3D::checkSeamlessness()
         std::cout << "Total Alignment Faces: " << f_align << " and cut Faces = " << f_cut << " and identity "
                   << f_identity << endl;
         std::cout << "Total singular Edges: " << e_singularAlign << " and feature edges: " << e_featureAlign << endl;
-        std::cout << "ERROR: Misaligned singular edges: " << bad_singularAlign << endl;
-        std::cout << "ERROR: Misaligned feature edges: " << bad_featureAlign << endl;
-        std::cout << "ERROR: Alignment Faces: " << bad_alignment << endl;
-        std::cout << "ERROR: " << v_count << " vertices not seamless across " << bad_cut << " cut faces and "
+        std::cout << (m_algorithmFinished ? "ERROR" : "INFO" ) << ": Misaligned singular edges: " << bad_singularAlign << endl;
+        std::cout << (m_algorithmFinished ? "ERROR" : "INFO" ) << ": Misaligned feature edges: " << bad_featureAlign << endl;
+        std::cout << (m_algorithmFinished ? "ERROR" : "INFO" ) << ": Alignment Faces: " << bad_alignment << endl;
+        std::cout << (m_algorithmFinished ? "ERROR" : "INFO" ) << ": " << v_count << " vertices not seamless across " << bad_cut << " cut faces and "
                   << bad_identity << " identity faces\n"
                   << endl;
 #endif
@@ -2489,6 +2489,8 @@ bool TrulySeamless3D::sanitize(double perturb, bool keepOriginalTransitions)
 
     if (m_failFlag)
         return false;
+
+    m_algorithmFinished = true;
 
 #ifndef TRULYSEAMLESS_SILENT
     cout << "Overall running time: " << subtractTimes(t_start) << " ms" << endl;
