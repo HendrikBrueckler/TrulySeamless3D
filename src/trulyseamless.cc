@@ -56,7 +56,7 @@ inline double randomDouble(double a)
 
 double volume(Vec3d u, Vec3d v, Vec3d w)
 {
-    Eigen::Matrix3f m;
+    Eigen::Matrix3d m;
     m << u[0], v[0], w[0], u[1], v[1], w[1], u[2], v[2], w[2];
     return m.determinant();
 }
@@ -2157,6 +2157,7 @@ int TrulySeamless3D::orientationCount()
     int degen = 0;
     double min_volume = 1.0;
     double max_volume = 0.0;
+    computeCellTypes();
     for (auto c_it = inputMesh.cells_begin(); c_it != inputMesh.cells_end(); ++c_it)
     {
         auto vertices = cellVertices[*c_it];
@@ -2165,15 +2166,14 @@ int TrulySeamless3D::orientationCount()
         auto v = parameter(*c_it, vertices[2]) - parameter(*c_it, vertices[0]);
         auto w = parameter(*c_it, vertices[3]) - parameter(*c_it, vertices[0]);
 
-        Eigen::Matrix3f m;
-        m << u[0], v[0], w[0], u[1], v[1], w[1], u[2], v[2], w[2];
         double d = volume(u, v, w);
-        if (d < 0.0)
-            inverted++;
-        if (d == 0.0)
-            degen++;
         min_volume = std::min(min_volume, d);
         max_volume = std::max(max_volume, d);
+
+        if (isCellFlipped(*c_it))
+            inverted++;
+        if (isCellDegenerate(*c_it))
+            degen++;
     }
 #ifndef TRULYSEAMLESS_SILENT
     std::cout << "Mesh Info: " << inverted << " inverted and " << degen
