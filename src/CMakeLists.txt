@@ -20,7 +20,9 @@ endif()
 list(APPEND TS3D_LIB_LIST HexEx::HexEx)
 
 #eigen
-find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+if (NOT TARGET Eigen3::Eigen) 
+  find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+endif()
 list(APPEND TS3D_LIB_LIST Eigen3::Eigen)
 
 ### Source files
