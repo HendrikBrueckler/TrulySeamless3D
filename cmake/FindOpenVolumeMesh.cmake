@@ -9,6 +9,8 @@ FIND_PATH(OPENVOLUMEMESH_INCLUDE_DIR OpenVolumeMesh/Mesh/TetrahedralMesh.hh
            "${CMAKE_CURRENT_SOURCE_DIR}/../OpenVolumeMesh/src"
             /usr/include
             /usr/local/OpenVolumeMesh/include
+  			$ENV{OVMDIR}
+  			${INCLUDE_INSTALL_DIR}
             )
 
 IF (OPENVOLUMEMESH_INCLUDE_DIR )
