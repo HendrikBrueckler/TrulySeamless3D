@@ -61,7 +61,8 @@ class TrulySeamless3D : public HexExtractor
     HalfFaceProperty<bool> m_orientationType;
 
     // Sheet Info
-    FaceProperty<SheetType> m_alignmentType; // u, v or w : 0,1,2
+    HalfFaceProperty<SheetType> m_alignmentType; // u, v or w : 0,1,2
+    FaceProperty<bool> m_isCut; // u, v or w : 0,1,2
     EdgeProperty<BranchType> m_branchType; // u, v or w : 0,1,2
     EdgeProperty<CellHandle> m_branchCell; // u, v or w : 0,1,2
     FaceProperty<int> m_sheet;               //-2 -> usual face, >=0 -> correspoing sheet id
@@ -240,7 +241,6 @@ class TrulySeamless3D : public HexExtractor
 
     template <class T>
     void resizeVec(std::vector<T>& A);
-    std::vector<HalfFaceHandle> halffacesAroundHalfedge(HalfEdgeHandle he);
     bool faceContainsEdge(HalfFaceHandle f, VertexHandle& v1, VertexHandle& v2);
     HalfFaceHandle otherEdgeFace(HalfFaceHandle& hf1, HalfEdgeHandle he);
     bool sameRotation(Transition& tranFun1, Transition& tranFun2);

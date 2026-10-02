@@ -70,7 +70,8 @@ TrulySeamless3D::TrulySeamless3D()
     : HexExtractor(), m_cellVisited(inputMesh.request_cell_property<bool>()),
       m_vertexUpdated(inputMesh.request_vertex_property<bool>()),
       m_orientationType(inputMesh.request_halfface_property<bool>()),
-      m_alignmentType(inputMesh.request_face_property<SheetType>()),
+      m_alignmentType(inputMesh.request_halfface_property<SheetType>()),
+      m_isCut(inputMesh.request_face_property<bool>()),
       m_branchType(inputMesh.request_edge_property<BranchType>()),
       m_branchCell(inputMesh.request_edge_property<CellHandle>()), m_sheet(inputMesh.request_face_property<int>()),
       m_branches(inputMesh.request_edge_property<int>()), m_node(inputMesh.request_vertex_property<bool>()),
@@ -496,7 +497,9 @@ void TrulySeamless3D::markSheets()
         // Initialize
         m_orientationType[hf1] = false;
         m_orientationType[hf2] = false;
-        m_alignmentType[*f_it] = SHEET_NONE;
+        m_alignmentType[hf1] = SHEET_NONE;
+        m_alignmentType[hf2] = SHEET_NONE;
+        m_isCut[*f_it] = false;
         m_sheet[*f_it] = -2;
 
         if (inputMesh.is_boundary(*f_it)) // alignment Sheets
@@ -517,7 +520,8 @@ void TrulySeamless3D::markSheets()
             {
                 if (error[i] <= error[(i + 1) % 3] && error[i] <= error[(i + 2) % 3])
                 {
-                    m_alignmentType[*f_it] = (SheetType)i;
+                    m_alignmentType[hf1] = (SheetType)i;
+                    m_alignmentType[hf2] = (SheetType)i;
                     break;
                 }
             }
@@ -525,8 +529,10 @@ void TrulySeamless3D::markSheets()
         else if (m_faceFeature[*f_it])
         {
             m_sheet[*f_it] = -1;
-            auto ch = inputMesh.incident_cell(hf1);
-            auto vertices = inputMesh.get_halfface_vertices(hf1);
+            for (auto hf : {hf1, hf2})
+            {
+                auto ch = inputMesh.incident_cell(hf);
+                auto vertices = inputMesh.get_halfface_vertices(hf);
             auto a = parameter(ch, vertices[0]);
             auto b = parameter(ch, vertices[1]);
             auto c = parameter(ch, vertices[2]);
@@ -535,12 +541,14 @@ void TrulySeamless3D::markSheets()
             {
                 if (error[i] <= error[(i + 1) % 3] && error[i] <= error[(i + 2) % 3])
                 {
-                    m_alignmentType[*f_it] = (SheetType)i;
+                        m_alignmentType[hf] = (SheetType)i;
                     break;
                 }
             }
         }
-        else
+        }
+
+        if (!inputMesh.is_boundary(*f_it))
         {
             auto ch1 = inputMesh.incident_cell(hf1);
             auto ch2 = inputMesh.incident_cell(hf2);
@@ -548,15 +556,19 @@ void TrulySeamless3D::markSheets()
             if (parameter(ch1, vertices[0]) != parameter(ch2, vertices[0])
                 || parameter(ch1, vertices[1]) != parameter(ch2, vertices[1])
                 || parameter(ch1, vertices[2]) != parameter(ch2, vertices[2]))
+            {
                 m_sheet[*f_it] = -1;
+                m_isCut[*f_it] = true;
+            }
         }
     }
 }
 
 void TrulySeamless3D::markBranches()
 {
-    // Mark Branches: Singularity OR feature OR surrounded by nonmanifold sheets
-    // OR on single sheet boundary OR different alignment faces
+    // Mark Branches: Singularity OR ...
+    // Boundary: #non-identity-faces > 2 OR different alignment faces
+    // Otherwise: #non-identity-faces != 0, 2
     for (auto e_it = inputMesh.edges_begin(); e_it != inputMesh.edges_end(); ++e_it)
     {
         m_branches[*e_it] = -2;
@@ -584,7 +596,7 @@ void TrulySeamless3D::markBranches()
             if (-1 == m_sheet[f])
             {
                 sheet_count++;
-                if (m_alignmentType[f] > SHEET_NONE)
+                if (m_alignmentType[hf] > SHEET_NONE)
                 {
                     auto normal = tranFun.inverted().transform_vector(getParameterNormal(hf));
                     if (inputMesh.is_boundary(hf))
@@ -654,7 +666,7 @@ void TrulySeamless3D::markNodes()
             {
                 n_branches++;
                 if (isSingularEdge(eOut) || m_edgeFeature[eOut])
-                n_alignbranches++;
+                    n_alignbranches++;
             }
         }
         if ((n_branches != 0 && n_branches != 2) || (n_alignbranches != 0 && n_alignbranches != 2))
@@ -676,7 +688,7 @@ void TrulySeamless3D::markNodes()
             fsVisited.insert(f0);
             components.push_back({{f0}});
             isValidComponent.push_back(false);
-            int nNonManifold = 0;
+            std::vector<EH> esNonManifold;
             while (!fQ.empty())
             {
                 auto f = fQ.front();
@@ -696,7 +708,7 @@ void TrulySeamless3D::markNodes()
                             if (-1 == m_sheet[fOther])
                                 valence++;
                         if (valence > 2)
-                            nNonManifold++;
+                            esNonManifold.push_back(e);
                     }
                     if (valence == 2)
                     {
@@ -713,7 +725,7 @@ void TrulySeamless3D::markNodes()
                     }
                 }
             }
-            if (nNonManifold == 2)
+            if (esNonManifold.size() == 2 && esNonManifold.front() != esNonManifold.back())
                 isValidComponent.back() = true;
         }
         if (components.size() >= 1)
@@ -788,9 +800,9 @@ void TrulySeamless3D::markNodes()
             // for (auto f : inputMesh.edge_faces(e))
             //     if (m_sheet[f] > -2)
             //     {
-            //         if (m_alignmentType[f] > -1)
+            //         if (m_alignmentType[inputMesh.halfface_handle(f,0)] > -1)
             //             hasAlignedSheet = true;
-            //         else
+            //         if (m_isCut[f])
             //             hasCutSheet = true;
             //         sheetFaces.insert(f);
             //         n++;
@@ -898,7 +910,7 @@ void TrulySeamless3D::markNode(VertexHandle vnode)
             m_nodeSector[s_ch][vnode] = m_nodeSectorCount;
             m_sectorCells[m_nodeSectorCount].push_back(s_ch);
 
-            // IF Sheet => push opposite face in circ_list ELSE in sector_list
+            // IF cut Sheet => push opposite face in circ_list ELSE in sector_list
             for (auto hf : inputMesh.cell(s_ch).halffaces())
             {
                 if (f_set.end() == f_set.find(hf))
@@ -907,7 +919,7 @@ void TrulySeamless3D::markNode(VertexHandle vnode)
                 if (inputMesh.is_boundary(hf_opp) || -1 < m_nodeSector[inputMesh.incident_cell(hf_opp)][vnode])
                     continue;
 
-                if (m_sheet[inputMesh.face_handle(hf_opp)] > -2)
+                if (m_sheet[inputMesh.face_handle(hf_opp)] > -2 && m_isCut[inputMesh.face_handle(hf_opp)])
                     circ_list.push_back(hf_opp);
                 else
                     sector_list.push_back(hf_opp);
@@ -981,7 +993,7 @@ void TrulySeamless3D::addNodeToSheet(VertexHandle& v, HalfFaceHandle& hf1, std::
     if (sheet_nodes.insert(std::make_pair(id1, id2)).second)
     {
         m_sheetNodeSectors[sheet_id].push_back(id1);
-        if (!boundary) // Save other sector only for CUT-sheets
+        if (!boundary) // Save other sector only for interior sheets
         {
             m_sheetNodeSectors[sheet_id].push_back(id2);
             sheet_nodes.insert(std::make_pair(id2, id1));
@@ -1023,10 +1035,12 @@ void TrulySeamless3D::traceSheets()
         m_sheet[*f_it] = m_totalSheetID;
         m_sheetType.push_back(hfSeed);
         bool boundary = inputMesh.is_boundary(*f_it);
-        int align = m_alignmentType[*f_it];
-        if (align > SHEET_NONE)
+        int align1 = m_alignmentType[inputMesh.halfface_handle(*f_it, 0)];
+        int align2 = m_alignmentType[inputMesh.halfface_handle(*f_it, 1)];
+        bool isCut = m_isCut[*f_it];
+        if (align1 > SHEET_NONE)
             m_sheetCountAlign++;
-        else
+        if (isCut)
             m_sheetCountCut++;
 
         while (!bfs_list.empty())
@@ -1058,25 +1072,26 @@ void TrulySeamless3D::traceSheets()
                 }
                 else // Edge is not a branch
                 {
-                    auto f_opp = otherEdgeFace(hf1, *hfhe_iter);
-                    auto f_opp_handle = inputMesh.face_handle(f_opp);
+                    auto hf_opp = otherEdgeFace(hf1, *hfhe_iter);
+                    auto f_opp = inputMesh.face_handle(hf_opp);
 
-                    assert(align == m_alignmentType[f_opp_handle]);
+                    assert(isCut == m_isCut[f_opp]);
+                    assert((align1 == m_alignmentType[hf_opp] || align2 == m_alignmentType[hf_opp]));
 
-                    if (-1 == m_sheet[f_opp_handle] && align == m_alignmentType[f_opp_handle])
+                    if (-1 == m_sheet[f_opp] && (align1 == m_alignmentType[hf_opp] || align2 == m_alignmentType[hf_opp]))
                     {
                         f_count++;
 #ifndef TRULYSEAMLESS_SILENT
                         if (!boundary)
                         {
-                            if (!sameRotation(hf1, f_opp))
+                            if (!sameRotation(hf1, hf_opp))
                                 printf("ERROR: Different Rotations for neighbor faces\n");
                         }
 #endif
-                        m_sheet[f_opp_handle] = m_totalSheetID;
-                        m_orientationType[f_opp] = true;
-                        bfs_list.push_back(f_opp);
-                        sheet_faces.push_back(f_opp);
+                        m_sheet[f_opp] = m_totalSheetID;
+                        m_orientationType[hf_opp] = true;
+                        bfs_list.push_back(hf_opp);
+                        sheet_faces.push_back(hf_opp);
                     }
                 }
             }
@@ -1194,10 +1209,11 @@ void TrulySeamless3D::computeSeamlessnessVariables()
         auto f = inputMesh.face_handle(hf);
 
         bool boundary = inputMesh.is_boundary(f);
-        bool align = m_alignmentType[f] > SHEET_NONE;
+        bool align = m_alignmentType[hf] > SHEET_NONE;
+        bool isCut = m_isCut[f];
         if (align)
         {
-            int alignmentCoord = m_alignmentType[f];
+            int alignmentCoord = m_alignmentType[hf];
             if (boundary)
             {
                 for (unsigned int j = 1; j < nodeSectors.size(); j++)
@@ -1217,7 +1233,7 @@ void TrulySeamless3D::computeSeamlessnessVariables()
                 }
             }
         }
-        if (!boundary) // cut sheet
+        if (isCut) // cut sheet
         {
             // EQUATION: - pi*u0_p + u0_n + pi*uj_p - uj_n = 0
 
@@ -1284,22 +1300,20 @@ void TrulySeamless3D::computeSeamlessnessVariables()
 
         set<EH> eVisited({e1});
         list<EH> es({e1});
-        bool foundNext = true;
+        int foundNext = 1;
         while (foundNext)
         {
-            foundNext = false;
+            foundNext = 0;
             for (auto v : inputMesh.edge_vertices(es.back()))
             {
-                if (foundNext)
-                    break;
                 for (auto e : inputMesh.vertex_edges(v))
                     if (eVisited.count(e) == 0 && m_branches[e] == i)
                     {
                         eVisited.insert(e);
                         es.push_back(e);
-                        foundNext = true;
-                        break;
+                        foundNext++;
                     }
+                assert(foundNext <= 1);
             }
         }
         set<int> sheetsCheck;
@@ -1857,7 +1871,7 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
         int u_p = 3 * m_sheetNodeSectors[i][0];
         a = Vec3d(X(u_p), X(u_p + 1), X(u_p + 2));
 
-        if (m_alignmentType[f] != SHEET_NONE)
+        if (m_alignmentType[hf] != SHEET_NONE)
             alignments[i] = a;
         if (!inputMesh.is_boundary(f))
         {
@@ -1961,7 +1975,7 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
         if (!inputMesh.is_boundary(f)) // Ignore non boundary branches
             continue;
 
-        int align = m_alignmentType[f];
+        int align = m_alignmentType[sheet_loop[sheet_loop.size() - 1]];
         int sheet_id = m_sheet[f];
         auto xx = alignments[sheet_id][align];
 
@@ -1989,7 +2003,7 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
         // Loop back and fill sectors
         f = inputMesh.face_handle(sheet_loop[0]);
         sheet_id = m_sheet[f];
-        align = m_alignmentType[f];
+        align = m_alignmentType[sheet_loop[0]];
         xx = alignments[sheet_id][align];
         p1[align] = xx;
         p2[align] = xx;
@@ -2025,7 +2039,7 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
             hf = inputMesh.halfface_handle(*f_it, 1);
 
         int sheet_id = m_sheet[*f_it];
-        int align = m_alignmentType[*f_it];
+        int align = m_alignmentType[hf];
 
         CellHandle c1 = inputMesh.incident_cell(hf);
         auto vx = inputMesh.get_halfface_vertices(hf);
@@ -2066,16 +2080,7 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
             hf = inputMesh.halfface_handle(*f_it, 1);
 
         int sheet_id = m_sheet[*f_it];
-        int align = m_alignmentType[*f_it];
-        if (align > SHEET_NONE && swapped)
-        {
-            Vec3d idx(0, 0, 0);
-            idx[align] = 1.0;
-            idx = m_transitionsInv[sheet_id].transform_vector(idx);
-            for (int i = 0; i < 3; i++)
-                if (idx[i] != 0)
-                    align = i;
-        }
+        int align = m_alignmentType[hf];
 
         assert(m_orientationType[hf]);
 
@@ -2103,7 +2108,7 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
 
     // Fill values in Branches
 #ifndef TRULYSEAMLESS_SILENT
-    printf("Fill values in singular Branches\n");
+    printf("Fill values in singular and feature Branches\n");
 #endif
     for (auto v_it = inputMesh.vertices_begin(); v_it != inputMesh.vertices_end(); ++v_it)
     {
@@ -2125,17 +2130,17 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
                 continue;
 
             std::vector<HalfFaceHandle> sheet_loop = getSheetLoop(inputMesh.halfedge_handle(e, 0));
-            auto tranFun = identity;
-            for (auto sheet_f : sheet_loop)
-            {
-                auto sheet_id = m_sheet[inputMesh.face_handle(sheet_f)];
-                auto TT = m_transitions[sheet_id];
-                if (!m_orientationType[sheet_f])
-                    TT = m_transitionsInv[sheet_id];
-                tranFun = tranFun * TT;
-            }
+            // auto tranFun = identity;
+            // for (auto sheet_f : sheet_loop)
+            // {
+            //     auto sheet_id = m_sheet[inputMesh.face_handle(sheet_f)];
+            //     auto TT = m_transitions[sheet_id];
+            //     if (!m_orientationType[sheet_f])
+            //         TT = m_transitionsInv[sheet_id];
+            //     tranFun = tranFun * TT;
+            // }
 
-            if (tranFun == identity && !m_edgeFeature[e])
+            if (!isSingularEdge(e) && !m_edgeFeature[e])
                 continue;
 
             // Trace this branch sector by sector
