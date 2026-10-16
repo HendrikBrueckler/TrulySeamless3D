@@ -78,7 +78,6 @@ set_target_properties(TS3D PROPERTIES
                       VERSION ${${PROJECT_NAME}_VERSION_MAJOR}.${${PROJECT_NAME}_VERSION_MINOR}
                       SOVERSION ${${PROJECT_NAME}_VERSION_MAJOR}.${${PROJECT_NAME}_VERSION_MINOR}
                       PUBLIC_HEADER "${TS3D_HEADER_LIST}"
-                      CXX_STANDARD 17
                       CXX_STANDARD_REQUIRED ON)
 # compile options
 list(APPEND TS3D_COMPILE_OPTIONS_PRV "-Wall" "-Wextra" "-Wshadow" "-Wunused" "-Wunused-function")

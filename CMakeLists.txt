@@ -27,10 +27,23 @@ endif()
 if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
     set(TS3D_STANDALONE TRUE)
     message("Configuring TS3D as standalone project...")
+### Global cmake settings
+    set(CMAKE_CXX_STANDARD 17)
+    set(CXX_STANDARD_REQUIRED ON)
+    set(CMAKE_C_EXTENSIONS OFF)
+    set(CMAKE_CXX_EXTENSIONS OFF)
+    if (TS3D_STANDALONE)
+        set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
+        set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
+        set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}")
+    endif()
 else()
     set(TS3D_STANDALONE FALSE)
     message("Configuring TS3D inside another cmake project...")
 endif()
+
+set(CMAKE_POSITION_INDEPENDENT_CODE ON) # TODO: only set on TS3d target)
+set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON) # TODO: only set on TS3d target)
 
 ### Options
 option(TS3D_BUILD_CLI         "Build CLI app for TrulySeamless3D" ${TS3D_STANDALONE})
@@ -38,18 +51,6 @@ option(TS3D_ENABLE_LOGGING    "Allow logging of TrulySeamless3D"  ${TS3D_STANDAL
 option(TS3D_SUBMODULES_MANUAL "Skip automatic submodule download" OFF)
 option(BUILD_SHARED_LIBS      "Build libraries as shared as opposed to static" ON)
 
-### Global cmake settings
-set(CMAKE_CXX_STANDARD 17)
-set(CXX_STANDARD_REQUIRED ON)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
-set(CMAKE_C_EXTENSIONS OFF)
-set(CMAKE_CXX_EXTENSIONS OFF)
-if (TS3D_STANDALONE)
-    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
-    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}")
-endif()
 
 ### Load external libs
 if(NOT ${TS3D_SUBMODULES_MANUAL})
