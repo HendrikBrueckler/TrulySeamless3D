@@ -38,7 +38,7 @@ In root directory
 
     mkdir build
     cd build
-    cmake [-DTRULYSEAMLESS_BUILD_CLI=Off] ..
+    cmake [-DTS3D_BUILD_CLI=Off] ..
     make
 
 ### Usage

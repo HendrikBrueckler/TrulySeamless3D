@@ -20,7 +20,7 @@ endif()
 list(APPEND TS3D_LIB_LIST HexEx::HexEx)
 
 #eigen
-if (NOT TARGET Eigen3::Eigen) 
+if (NOT TARGET Eigen3::Eigen)
   find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 endif()
 list(APPEND TS3D_LIB_LIST Eigen3::Eigen)
@@ -84,7 +84,7 @@ list(APPEND TS3D_COMPILE_OPTIONS_PRV "-Wall" "-Wextra" "-Wshadow" "-Wunused" "-W
 target_compile_options(TS3D PRIVATE ${TS3D_COMPILE_OPTIONS_PRV})
 # preprocessor defines
 if (NOT ${TS3D_ENABLE_LOGGING})
-    list(APPEND TS3D_COMPILE_DEFINITIONS_PRV "TRULYSEAMLESS_SILENT")
+    list(APPEND TS3D_COMPILE_DEFINITIONS_PRV "TS3D_SILENT")
 endif()
 target_compile_definitions(TS3D PRIVATE ${TS3D_COMPILE_DEFINITIONS_PRV})
 

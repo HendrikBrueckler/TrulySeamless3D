@@ -107,7 +107,7 @@ bool TrulySeamless3D::init()
         }
     }
 
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     if (m_failFlag)
         printf("Degenerate triangles!\n");
 #endif
@@ -446,7 +446,7 @@ HalfFaceHandle TrulySeamless3D::otherEdgeFace(HalfFaceHandle& hf, HalfEdgeHandle
 {
     if (inputMesh.is_boundary(hf))
     {
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
         std::cout << "ERROR: should not be boundary" << std::endl;
 #endif
         m_failFlag = true;
@@ -477,7 +477,7 @@ HalfFaceHandle TrulySeamless3D::otherEdgeFace(HalfFaceHandle& hf, HalfEdgeHandle
         }
         if (!found)
         {
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
             std::cout << "ERROR: No neighbouring face?" << std::endl;
 #endif
             m_failFlag = true;
@@ -611,7 +611,7 @@ void TrulySeamless3D::markBranches()
             hf = inputMesh.opposite_halfface_handle(hf);
         } while (hf != hf1);
         bool multiAlign = false;
-        for (int i = 1; i < parameterNormals.size(); i++)
+        for (size_t i = 1; i < parameterNormals.size(); i++)
             if (std::abs(parameterNormals[0] | parameterNormals[i]) < 0.5)
             {
                 multiAlign = true;
@@ -851,7 +851,7 @@ void TrulySeamless3D::markNodes()
         // }
     }
 
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     printf("Nodes = %d\n", node_count);
     printf("Sectors = %d\n", m_nodeSectorCount);
 #endif
@@ -971,7 +971,7 @@ void TrulySeamless3D::traceBranches()
         }
         m_branchID++;
     }
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     printf("Total Branches = %d\n", m_branchID);
 #endif
 }
@@ -1016,7 +1016,6 @@ void TrulySeamless3D::traceSheets()
             continue;
 
         std::set<VertexHandle> sheet_branch_vertices;
-        int f_count = 1;
 
         // Trace this sheet
         std::list<HalfFaceHandle> bfs_list;
@@ -1052,7 +1051,7 @@ void TrulySeamless3D::traceSheets()
             for (HalfFaceHalfEdgeIter hfhe_iter = inputMesh.hfhe_iter(hf1); hfhe_iter.valid(); ++hfhe_iter)
             {
                 auto eh = inputMesh.edge_handle(*hfhe_iter);
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
                 if (m_branches[eh] == -1)
                     std::cout << "ERROR: cutBranch id not set?" << std::endl;
 #endif
@@ -1080,8 +1079,7 @@ void TrulySeamless3D::traceSheets()
 
                     if (-1 == m_sheet[f_opp] && (align1 == m_alignmentType[hf_opp] || align2 == m_alignmentType[hf_opp]))
                     {
-                        f_count++;
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
                         if (!boundary)
                         {
                             if (!sameRotation(hf1, hf_opp))
@@ -1117,19 +1115,19 @@ void TrulySeamless3D::traceSheets()
         }
         m_totalSheetID++;
     }
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     printf("Total Sheets = %d (align = %d and cut = %d)\n\n", m_totalSheetID, m_sheetCountAlign, m_sheetCountCut);
 #endif
 
     if (invalid_sheets > 0)
     {
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
         printf("Invalid sheets (not enough nodes on them) = %d\n", invalid_sheets);
 #endif
         if (m_refillIfSheetEmpty)
         {
             m_refillIfSheetEmpty = false;
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
             printf("Adding extra nodes and Refilling\n");
 #endif
             // mark new nodes
@@ -1190,19 +1188,17 @@ void TrulySeamless3D::computeSeamlessnessVariables()
 {
     typedef Eigen::Triplet<int, int> Triplets_int;
 
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     std::cout << "Setting EQUATION SYSTEM" << std::endl;
 #endif
     // Fill equations
     std::vector<Triplets_int> triplets;
     int eq = 0;
-    int sheets_ignored = 0;
     for (unsigned int i = 0; i < m_sheetNodeSectors.size(); i++)
     {
         std::vector<int>& nodeSectors = m_sheetNodeSectors[i];
         if (nodeSectors.size() < 2)
         {
-            sheets_ignored++;
             continue;
         }
         auto hf = m_sheetType[i];
@@ -1422,7 +1418,7 @@ void TrulySeamless3D::computeSeamlessnessVariables()
     b.resize(eq);
     b.setZero();
 
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     printf("Overall equations: %ld x %ld\n", C.rows(), C.cols());
 #endif
 
@@ -1436,7 +1432,7 @@ void TrulySeamless3D::computeSeamlessnessVariables()
     C.setFromTriplets(triplets.begin(), triplets.end());
     C_orig = C;
 
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     cout << "entries(non-zero elements):" << (double)100 * nonzero(C) / (C.outerSize() * C.innerSize())
          << "% : " << C.nonZeros() << endl
          << endl;
@@ -1444,19 +1440,19 @@ void TrulySeamless3D::computeSeamlessnessVariables()
 
     double total_time = 0.0;
 
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     cout << "IREF:" << endl;
 #endif
     IREF(C, b, indexC, indexR, true, total_time);
 
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     cout << "IRREF:" << endl;
 #endif
     IRREF(C, b, indexC, true, total_time);
 
     statistic(C, indexC);
 
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     cout << "evaluation:" << endl;
 #endif
     X = evaluate(C, X_bar, b, M, m_uv_max, indexC, indexR);
@@ -1478,7 +1474,7 @@ void TrulySeamless3D::computeSeamlessnessVariables()
             non_zero++;
     }
 
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     printf("C_ij max input error = %0.17f\n", max_b);
     printf("non zero output entries: %d\n", non_zero);
 #endif
@@ -1626,7 +1622,7 @@ void TrulySeamless3D::fixPrecision(double& uv_max)
             diff = std::max(diff, fabs(p[2]));
         }
     }
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     if (0 == diff)
         printf("\nNO CHANGE via precision fixing\n");
     else
@@ -1785,7 +1781,7 @@ bool TrulySeamless3D::fillBranchAxis(VertexHandle node, HalfFaceHandle finp, std
             }
         }
 
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
         printf("Could not find other node along the branch. Is it an issue?\n");
 #endif
         return false;
@@ -1852,7 +1848,7 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
         m_vertexUpdated[v] = false;
 
         // Compute Unique translation per cut-sheet
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     printf("Compute Final Transitions\n");
 #endif
     m_transitions.clear();
@@ -1893,7 +1889,7 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
     }
 
     // Fill values in Nodes
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     printf("Fill values in Nodes\n");
 #endif
     for (unsigned int i = 0; i < m_sectorVh.size(); i++)
@@ -1947,13 +1943,13 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
                 node_count++;
         if (2 != node_count)
         {
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
             printf("WARNING: Number of nodes in a branch = %d\n", node_count);
 #endif
         }
     }
 
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     printf("Fill values in boundary Branches\n");
 #endif
     // Fill alignment constraints along the branches
@@ -2024,7 +2020,7 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
     }
 
     // Fill Boundary Sheets first
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     printf("Fill values in non-branch Boundary-Sheet vertices\n");
 #endif
     for (auto f_it = inputMesh.faces_begin(); f_it != inputMesh.faces_end(); ++f_it)
@@ -2063,7 +2059,7 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
     }
 
     // Fill sheets
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     printf("Fill values in non-branch Sheet vertices\n");
 #endif
     for (auto f_it = inputMesh.faces_begin(); f_it != inputMesh.faces_end(); ++f_it)
@@ -2107,7 +2103,7 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
     }
 
     // Fill values in Branches
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     printf("Fill values in singular and feature Branches\n");
 #endif
     for (auto v_it = inputMesh.vertices_begin(); v_it != inputMesh.vertices_end(); ++v_it)
@@ -2168,7 +2164,7 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
 
             if (!fixed_axis)
             {
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
                 printf("ERROR: In fixing the axis of a singularity\n");
 #endif
                 m_failFlag = true;
@@ -2180,7 +2176,7 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
         }
     }
 
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     printf("Fill values in rest of cut Branches\n");
 #endif
     // Fill using Transitions
@@ -2212,7 +2208,7 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
         m_vertexUpdated[v2] = true;
     }
 
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     printf("Done : Filled new values\n");
 #endif
 }
@@ -2241,7 +2237,7 @@ int TrulySeamless3D::orientationCount()
         if (isCellDegenerate(*c_it))
             degen++;
     }
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     std::cout << "Mesh Info: " << inverted << " inverted and " << degen
               << " degenerate cells with volume min = " << min_volume << " max = " << max_volume << std::endl;
 #endif
@@ -2375,7 +2371,7 @@ bool TrulySeamless3D::checkSeamlessness()
             diff = std::max(diff, fabs(p[2]));
         }
     }
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     printf("\nMax change in Parametrization = %f\n", diff);
 #endif
 
@@ -2417,7 +2413,7 @@ bool TrulySeamless3D::checkSeamlessness()
 
     if (0 != v_count)
     {
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
         std::cout << "Total Alignment Faces: " << f_align << " and cut Faces = " << f_cut << " and identity "
                   << f_identity << endl;
         std::cout << "Total singular Edges: " << e_singularAlign << " and feature edges: " << e_featureAlign << endl;
@@ -2430,7 +2426,7 @@ bool TrulySeamless3D::checkSeamlessness()
 #endif
         return false;
     }
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     std::cout << "Output is Truly Seamless!" << endl;
 #endif
     return true;
@@ -2440,7 +2436,7 @@ void TrulySeamless3D::perturbParametrization(double perturb)
 {
     if (0.0 == perturb)
         return;
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     printf("\nPerturb the parametrization with range %f\n", perturb);
 #endif
     int f_perturbed = 0;
@@ -2474,11 +2470,11 @@ void TrulySeamless3D::perturbParametrization(double perturb)
         }
         f_perturbed++;
     }
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     std::cout << "Perturbed Faces = " << f_perturbed << std::endl;
 #endif
 
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     std::pair<int, int> c2 = identityTransitionCount();
     std::cout << "Perturbation: #Identity Transitions = " << c2.first << " and #Non-Identity = " << c2.second
               << std::endl
@@ -2494,24 +2490,24 @@ bool TrulySeamless3D::sanitize(double perturb, bool keepOriginalTransitions)
 {
     if (m_failFlag)
     {
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
         std::cout << "ERROR: Not properly initialized" << endl;
 #endif
         return false;
     }
     if (orientationCount() > 0)
     {
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
         std::cout << "ERROR: Algorithm cannot work with flipped or degenerate tets" << endl;
 #endif
         return false;
     }
 
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     auto t_start = std::chrono::high_resolution_clock::now();
 #endif
 
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     std::pair<int, int> c1 = identityTransitionCount();
     std::cout << "INPUT: #Identity Transitions = " << c1.first << " and #Non-Identity = " << c1.second << std::endl;
 #endif
@@ -2519,7 +2515,7 @@ bool TrulySeamless3D::sanitize(double perturb, bool keepOriginalTransitions)
     if (!keepOriginalTransitions)
     {
         pushTransitionsOntoCutgraph();
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
         std::pair<int, int> c2 = identityTransitionCount();
         std::cout << "CutGraph: #Identity Transitions = " << c2.first << " and #Non-Identity = " << c2.second
                   << std::endl;
@@ -2558,7 +2554,7 @@ bool TrulySeamless3D::sanitize(double perturb, bool keepOriginalTransitions)
 
     m_algorithmFinished = true;
 
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     cout << "Overall running time: " << subtractTimes(t_start) << " ms" << endl;
 #endif
 

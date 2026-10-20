@@ -198,7 +198,7 @@ void IREF(SparseMatrixi& C, VectorXd& b, VectorXi& indexC, VectorXi& indexR, boo
     }
 
     total_time = subtractTimes(start);
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     cout << "running time: " << total_time << " ms" << endl;
 #endif
 }
@@ -314,7 +314,7 @@ void IRREF(SparseMatrixi& C, VectorXd& b, VectorXi indexC, bool gcd_division, do
 
     double t = subtractTimes(start);
     total_time += t;
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     cout << "running time: " << t << " ms" << endl;
 #endif
 }
@@ -347,7 +347,7 @@ double getIntFactor(VectorXd& X_bar, double M, double uv_max)
 VectorXd
 evaluate(SparseMatrixi C, VectorXd X_bar, VectorXd b, double M, double uv_max, VectorXi indexC, VectorXi indexR)
 {
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     auto start = std::chrono::high_resolution_clock::now();
 #endif
 
@@ -393,7 +393,7 @@ evaluate(SparseMatrixi C, VectorXd X_bar, VectorXd b, double M, double uv_max, V
         }
     }
 
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     cout << "running time: " << subtractTimes(start) << " ms" << endl;
 #endif
     return X / f_max;
@@ -434,7 +434,7 @@ double safeDotProd(vector<pair<int, double>> S, double M)
 
             if (0 == counter % 1000 && 0 == k)
             {
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
                 std::cout << "k = " << k << flush;
 #endif
                 throw std::runtime_error("Safe dot product numerical failure");
@@ -453,7 +453,7 @@ double safeDotProd(vector<pair<int, double>> S, double M)
             r += k * x;
             if (0 == counter % 1000 && 0 == k)
             {
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
                 std::cout << "k = " << k << flush;
 #endif
                 throw std::runtime_error("Safe dot product numerical failure");
@@ -541,7 +541,7 @@ void statistic(SparseMatrixi C)
         }
     }
 
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     cout << "absolute largest value : " << abs_max << endl;
     cout << "entries:" << (double)100 * C.nonZeros() / (C.outerSize() * C.innerSize()) << "% : " << C.nonZeros()
          << endl;
@@ -571,7 +571,7 @@ void statistic(SparseMatrixi C, VectorXi indexC)
         }
     }
 
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
     cout << "absolute largest value : " << abs_max << endl;
     cout << "entries:" << (double)100 * C.nonZeros() / (C.outerSize() * C.innerSize()) << "% : " << C.nonZeros()
          << endl;
@@ -585,7 +585,7 @@ int divideInt(int dividend, int divisor, int s)
     (void)s;
     if (dividend % divisor != 0)
     {
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
         cerr << "ERROR MESSAGE div (" << s << ") : aliquant div!" << dividend << "/" << divisor << endl;
 #endif
         throw std::runtime_error("Non-integer division result in divideInt");
@@ -600,7 +600,7 @@ int multiplyInt(int a, int b)
     {
         if ((b > 0 && a > INT_MAX / b) || (b <= 0 && b < INT_MIN / a))
         {
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
             cerr << "ERROR MESSAGE : overflow Mult1!" << a << "x" << b << endl;
 #endif
             throw std::runtime_error("Overflow in multiplyInt");
@@ -610,7 +610,7 @@ int multiplyInt(int a, int b)
     {
         if ((b > 0 && a < INT_MIN / b) || (b <= 0 && a != 0 && b < INT_MAX / a))
         {
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
             cerr << "ERROR MESSAGE : overflow Mult2!" << a << "x" << b << endl;
 #endif
             throw std::runtime_error("Overflow in multiplyInt");
@@ -623,7 +623,7 @@ int addInt(int a, int b)
 {
     if ((b > 0 && a > INT_MAX - b) || (b < 0 && a < INT_MIN - b))
     {
-#ifndef TRULYSEAMLESS_SILENT
+#ifndef TS3D_SILENT
         cerr << "ERROR MESSAGE : overflow Add!" << a << "+" << b << endl;
 #endif
         throw std::runtime_error("Overflow in addInt");
