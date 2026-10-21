@@ -509,7 +509,7 @@ void TrulySeamless3D::markSheets()
 
             m_sheet[*f_it] = -1;
             if (inputMesh.is_boundary(hf1)) // Non border half-face
-                hf1 = hf2;
+                std::swap(hf1, hf2);
             auto ch = inputMesh.incident_cell(hf1);
             auto vertices = inputMesh.get_halfface_vertices(hf1);
             auto a = parameter(ch, vertices[0]);
@@ -525,6 +525,10 @@ void TrulySeamless3D::markSheets()
                     break;
                 }
             }
+            if (m_alignmentType[hf1] == SHEET_NONE)
+                throw std::logic_error("AAH");
+            if (m_alignmentType[hf2] == SHEET_NONE)
+                throw std::logic_error("AAH");
         }
         else if (m_faceFeature[*f_it])
         {
@@ -545,6 +549,8 @@ void TrulySeamless3D::markSheets()
                     break;
                 }
             }
+                if (m_alignmentType[hf] == SHEET_NONE)
+                    throw std::logic_error("AAH");
         }
         }
 
