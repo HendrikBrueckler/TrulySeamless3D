@@ -660,7 +660,7 @@ void TrulySeamless3D::markNodes()
     // OR two differently aligned/singular branch edge
     // If node => mark its variables in its cells
     m_nodeSectorCount = 0;
-    int node_count = 0;
+    [[maybe_unused]] int node_count = 0;
     for (auto v_it = inputMesh.vertices_begin(); v_it != inputMesh.vertices_end(); ++v_it)
     {
         m_node[*v_it] = false;
@@ -1473,7 +1473,7 @@ void TrulySeamless3D::computeSeamlessnessVariables()
         }
     }
     VectorXd b_final = C_orig.cast<double>() * X;
-    int non_zero = 0;
+    [[maybe_unused]] int non_zero = 0;
     for (int i = 0; i < b_final.size(); i++)
     {
         if (0.0 != b_final(i))
@@ -2270,13 +2270,13 @@ bool TrulySeamless3D::checkSeamlessness()
 {
     extractTransitionFunctions();
 
-    int f_align = 0;
-    int f_cut = 0;
-    int f_identity = 0;
+    [[maybe_unused]] int f_align = 0;
+    [[maybe_unused]] int f_cut = 0;
+    [[maybe_unused]] int f_identity = 0;
     int v_count = 0;
-    int bad_alignment = 0;
-    int bad_cut = 0;
-    int bad_identity = 0;
+    [[maybe_unused]] int bad_alignment = 0;
+    [[maybe_unused]] int bad_cut = 0;
+    [[maybe_unused]] int bad_identity = 0;
 
     std::set<VertexHandle> error_vset;
     for (auto f_it = inputMesh.faces_begin(); f_it != inputMesh.faces_end(); ++f_it)
@@ -2381,10 +2381,10 @@ bool TrulySeamless3D::checkSeamlessness()
     printf("\nMax change in Parametrization = %f\n", diff);
 #endif
 
-    int e_singularAlign = 0;
-    int e_featureAlign = 0;
-    int bad_singularAlign = 0;
-    int bad_featureAlign = 0;
+    [[maybe_unused]] int e_singularAlign = 0;
+    [[maybe_unused]] int e_featureAlign = 0;
+    [[maybe_unused]] int bad_singularAlign = 0;
+    [[maybe_unused]] int bad_featureAlign = 0;
 
     for (auto e : inputMesh.edges())
     {
@@ -2445,7 +2445,7 @@ void TrulySeamless3D::perturbParametrization(double perturb)
 #ifndef TS3D_SILENT
     printf("\nPerturb the parametrization with range %f\n", perturb);
 #endif
-    int f_perturbed = 0;
+    [[maybe_unused]] int f_perturbed = 0;
     for (auto f_it = inputMesh.faces_begin(); f_it != inputMesh.faces_end(); ++f_it)
     {
         auto hf1 = inputMesh.halfface_handle(*f_it, 0);
