@@ -522,7 +522,7 @@ int lcmArr(vector<int> D)
 
 void statistic(SparseMatrixi C)
 {
-    int count = 0;
+    [[maybe_unused]] int count = 0;
     int abs_max = 0;
 
     for (int i = 0; i < C.outerSize(); i++)
@@ -552,7 +552,7 @@ void statistic(SparseMatrixi C)
 
 void statistic(SparseMatrixi C, VectorXi indexC)
 {
-    int count = 0;
+    [[maybe_unused]] int count = 0;
     int abs_max = 0;
 
     for (int i = 0; i < C.outerSize(); i++)
