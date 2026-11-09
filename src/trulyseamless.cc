@@ -175,7 +175,7 @@ void TrulySeamless3D::extractTransitionFunction(FaceHandle fh)
             auto tv = v1 - v0_t;
             auto w0_t = min_transition.transform_point(w0);
             auto tw = w1 - w0_t;
-            auto t = tu != Vec3d(0, 0, 0) ? tu : (tv != Vec3d(0,0,0) ? tv : tw);
+            auto t = tu != Vec3d(0, 0, 0) ? tu : (tv != Vec3d(0, 0, 0) ? tv : tw);
 
             setTranslation(min_transition, t);
 
@@ -190,7 +190,7 @@ void TrulySeamless3D::extractTransitionFunctions()
 {
     auto n = inputMesh.n_faces();
 
-    //#pragma omp parallel for
+    // #pragma omp parallel for
     for (auto i = 0u; i < n; ++i)
     {
         auto fh = FaceHandle(i);
@@ -537,21 +537,22 @@ void TrulySeamless3D::markSheets()
             {
                 auto ch = inputMesh.incident_cell(hf);
                 auto vertices = inputMesh.get_halfface_vertices(hf);
-            auto a = parameter(ch, vertices[0]);
-            auto b = parameter(ch, vertices[1]);
-            auto c = parameter(ch, vertices[2]);
-            auto error = absolute(b - a) + absolute(c - b) + absolute(c - a); // direction for minimum alignment error
-            for (int i = 0; i < 3; i++)
-            {
-                if (error[i] <= error[(i + 1) % 3] && error[i] <= error[(i + 2) % 3])
+                auto a = parameter(ch, vertices[0]);
+                auto b = parameter(ch, vertices[1]);
+                auto c = parameter(ch, vertices[2]);
+                auto error
+                    = absolute(b - a) + absolute(c - b) + absolute(c - a); // direction for minimum alignment error
+                for (int i = 0; i < 3; i++)
                 {
+                    if (error[i] <= error[(i + 1) % 3] && error[i] <= error[(i + 2) % 3])
+                    {
                         m_alignmentType[hf] = (SheetType)i;
-                    break;
+                        break;
+                    }
                 }
-            }
                 if (m_alignmentType[hf] == SHEET_NONE)
                     throw std::logic_error("AAH");
-        }
+            }
         }
 
         if (!inputMesh.is_boundary(*f_it))
@@ -622,8 +623,7 @@ void TrulySeamless3D::markBranches()
             {
                 multiAlign = true;
                 break;
-        }
-
+            }
 
         if (1 == sheet_count || sheet_count > 2 || multiAlign)
             m_branches[*e_it] = -1;
@@ -700,7 +700,7 @@ void TrulySeamless3D::markNodes()
                 auto f = fQ.front();
                 fQ.pop_front();
 
-                for (auto e: inputMesh.face_edges(f))
+                for (auto e : inputMesh.face_edges(f))
                 {
                     auto vs = inputMesh.edge_vertices(e);
                     if (vs[0] != *v_it && vs[1] != *v_it)
@@ -710,7 +710,7 @@ void TrulySeamless3D::markNodes()
                     {
                         esVisited.insert(e);
                         valence = 0;
-                        for (auto fOther: inputMesh.edge_faces(e))
+                        for (auto fOther : inputMesh.edge_faces(e))
                             if (-1 == m_sheet[fOther])
                                 valence++;
                         if (valence > 2)
@@ -1083,7 +1083,8 @@ void TrulySeamless3D::traceSheets()
                     assert(isCut == m_isCut[f_opp]);
                     assert((align1 == m_alignmentType[hf_opp] || align2 == m_alignmentType[hf_opp]));
 
-                    if (-1 == m_sheet[f_opp] && (align1 == m_alignmentType[hf_opp] || align2 == m_alignmentType[hf_opp]))
+                    if (-1 == m_sheet[f_opp]
+                        && (align1 == m_alignmentType[hf_opp] || align2 == m_alignmentType[hf_opp]))
                     {
 #ifndef TS3D_SILENT
                         if (!boundary)
@@ -1351,8 +1352,11 @@ void TrulySeamless3D::computeSeamlessnessVariables()
                     if (!tetNext.is_valid() || tetVisited.count(tetNext) != 0)
                         continue;
                     bool onBranch = false;
-                    for (auto v : inputMesh.cell_vertices(tetNext))
+                    for (auto v : inputMesh.halfface_vertices(hf))
                     {
+                        // Prevent sneaking around a potential dangling end of cut surface at the branch ends
+                        if (v == v1 || v == v2)
+                            continue;
                         for (auto e : inputMesh.vertex_edges(v))
                         {
                             if (m_branches[e] == i)
@@ -1853,7 +1857,7 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
     for (auto v : inputMesh.vertices())
         m_vertexUpdated[v] = false;
 
-        // Compute Unique translation per cut-sheet
+    // Compute Unique translation per cut-sheet
 #ifndef TS3D_SILENT
     printf("Compute Final Transitions\n");
 #endif
@@ -2423,11 +2427,14 @@ bool TrulySeamless3D::checkSeamlessness()
         std::cout << "Total Alignment Faces: " << f_align << " and cut Faces = " << f_cut << " and identity "
                   << f_identity << endl;
         std::cout << "Total singular Edges: " << e_singularAlign << " and feature edges: " << e_featureAlign << endl;
-        std::cout << (m_algorithmFinished ? "ERROR" : "INFO" ) << ": Misaligned singular edges: " << bad_singularAlign << endl;
-        std::cout << (m_algorithmFinished ? "ERROR" : "INFO" ) << ": Misaligned feature edges: " << bad_featureAlign << endl;
-        std::cout << (m_algorithmFinished ? "ERROR" : "INFO" ) << ": Misaligned boundary/feature Faces: " << bad_alignment << endl;
-        std::cout << (m_algorithmFinished ? "ERROR" : "INFO" ) << ": " << v_count << " vertices not seamless across " << bad_cut << " cut faces and "
-                  << bad_identity << " identity faces\n"
+        std::cout << (m_algorithmFinished ? "ERROR" : "INFO") << ": Misaligned singular edges: " << bad_singularAlign
+                  << endl;
+        std::cout << (m_algorithmFinished ? "ERROR" : "INFO") << ": Misaligned feature edges: " << bad_featureAlign
+                  << endl;
+        std::cout << (m_algorithmFinished ? "ERROR" : "INFO")
+                  << ": Misaligned boundary/feature Faces: " << bad_alignment << endl;
+        std::cout << (m_algorithmFinished ? "ERROR" : "INFO") << ": " << v_count << " vertices not seamless across "
+                  << bad_cut << " cut faces and " << bad_identity << " identity faces\n"
                   << endl;
 #endif
         return false;
