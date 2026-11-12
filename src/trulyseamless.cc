@@ -1,5 +1,3 @@
-#include <fstream>
-#include <iomanip>
 #include <iostream>
 
 #include <list>
@@ -67,19 +65,24 @@ Vec3d randomVec(double a)
 }
 
 TrulySeamless3D::TrulySeamless3D()
-    : HexExtractor(), m_cellVisited(inputMesh.request_cell_property<bool>()),
+    : HexExtractor(),
+      m_cellVisited(inputMesh.request_cell_property<bool>()),
       m_vertexUpdated(inputMesh.request_vertex_property<bool>()),
       m_orientationType(inputMesh.request_halfface_property<bool>()),
       m_alignmentType(inputMesh.request_halfface_property<SheetType>()),
       m_isCut(inputMesh.request_face_property<bool>()),
       m_branchType(inputMesh.request_edge_property<BranchType>()),
-      m_branchCell(inputMesh.request_edge_property<CellHandle>()), m_sheet(inputMesh.request_face_property<int>()),
-      m_branches(inputMesh.request_edge_property<int>()), m_node(inputMesh.request_vertex_property<bool>()),
+      m_branchCell(inputMesh.request_edge_property<CellHandle>()),
+      m_sheet(inputMesh.request_face_property<int>()),
+      m_branches(inputMesh.request_edge_property<int>()),
+      m_node(inputMesh.request_vertex_property<bool>()),
       m_nodeSector(inputMesh.request_cell_property<VertexMapProp<int>>()),
       m_cellVisitedCheck(inputMesh.request_cell_property<VertexMapProp<bool>>()),
       m_paramOld(inputMesh.request_cell_property<VertexMapProp<Parameter>>()),
       m_edgeFeature(inputMesh.request_edge_property<bool>()),
-      m_vertexFeature(inputMesh.request_vertex_property<bool>()), m_faceFeature(inputMesh.request_face_property<bool>())
+      m_vertexFeature(inputMesh.request_vertex_property<bool>()),
+      m_faceFeature(inputMesh.request_face_property<bool>()),
+      m_cellVertexLocal(inputMesh.request_cell_property<VertexMapProp<VertexHandle>>())
 {
     m_withBoundaryAlignment = true;
     m_refillIfSheetEmpty = true;
@@ -87,7 +90,6 @@ TrulySeamless3D::TrulySeamless3D()
 
 bool TrulySeamless3D::init()
 {
-    m_withBoundaryAlignment = true;
     m_refillIfSheetEmpty = true;
     for (auto ch : inputMesh.cells())
     {
@@ -245,6 +247,24 @@ void TrulySeamless3D::calculateEdgeSingularity(EdgeHandle eh)
 {
     if (inputMesh.is_boundary(eh))
     {
+        if (!m_withBoundaryAlignment)
+        {
+            int nAligned = 0;
+            for (auto it = inputMesh.hehf_iter(inputMesh.halfedge_handle(eh, 0)); it.valid(); ++it)
+            {
+                HalfFaceHandle hf = *it;
+                if (!inputMesh.is_boundary(hf.face_handle()))
+                    continue;
+                if (m_faceFeature[hf.face_handle()])
+                    ++nAligned;
+            }
+            if (nAligned < 2)
+            {
+                edgeSingularity[eh] = false;
+                return;
+            }
+        }
+
         // for safety, all boundary edges incident to a degenerate cell are considered singular
         for (auto hec_it = inputMesh.hec_iter(inputMesh.halfedge_handle(eh, 0)); hec_it.valid(); ++hec_it)
         {
@@ -625,7 +645,8 @@ void TrulySeamless3D::markBranches()
                 break;
             }
 
-        if (1 == sheet_count || sheet_count > 2 || multiAlign)
+        if (1 == sheet_count || sheet_count > 2 || multiAlign || parameterNormals.size() == 1
+            || (inputMesh.is_boundary(*e_it) && sheet_count > (int)parameterNormals.size()))
             m_branches[*e_it] = -1;
     }
 
@@ -1640,6 +1661,7 @@ void TrulySeamless3D::fixPrecision(double& uv_max)
 #endif
 }
 
+// THIS MAY YIELD NON-SHEET FACETS AT BOUNDARY
 std::vector<HalfFaceHandle> TrulySeamless3D::getSheetLoop(HalfEdgeHandle he)
 {
     auto e = inputMesh.halfedge(he);
@@ -1685,7 +1707,7 @@ std::vector<HalfFaceHandle> TrulySeamless3D::getSheetLoop(HalfEdgeHandle he)
         hf_new = inputMesh.opposite_halfface_handle(hf_new); // Jump to next cell around edge
         auto f = inputMesh.face_handle(hf_new);
 
-        if (hf_new != hf_start && m_sheet[f] >= 0)
+        if (hf_new != hf_start && (m_sheet[f] >= 0 || inputMesh.is_boundary(f)))
             sheet_loop.push_back(hf_new);
 
         if (inputMesh.is_boundary(f)) // Reached another boundary face
@@ -1708,6 +1730,8 @@ bool TrulySeamless3D::containsBranchVertex(HalfFaceHandle hf, VertexHandle node,
 
 bool TrulySeamless3D::fillBranchAxis(VertexHandle node, HalfFaceHandle finp, std::set<VertexHandle>& bv)
 {
+    if (inputMesh.is_boundary(finp))
+        return false;
     auto p0 = parameter(inputMesh.incident_cell(finp), node);
     for (auto v : bv)
     {
@@ -1867,6 +1891,10 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
     std::map<int, Vec3d> alignments;
     for (unsigned int i = 0; i < m_sheetNodeSectors.size(); i++)
     {
+        // sheets without (enough) nodes got no equations in computeSeamlessnessVariables;
+        // skip them here as well (identity continuation is used when filling)
+        if (m_sheetNodeSectors[i].size() < 2)
+            continue;
         auto hf = m_sheetType[i];
         assert(m_orientationType[hf]);
         auto f = inputMesh.face_handle(hf);
@@ -1977,25 +2005,27 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
             continue;
 
         std::vector<HalfFaceHandle> sheet_loop = getSheetLoop(inputMesh.halfedge_handle(*e_it, 0));
-        auto f = inputMesh.face_handle(sheet_loop[sheet_loop.size() - 1]);
-        if (!inputMesh.is_boundary(f)) // Ignore non boundary branches
-            continue;
+        auto f = inputMesh.face_handle(sheet_loop.back());
 
-        int align = m_alignmentType[sheet_loop[sheet_loop.size() - 1]];
-        int sheet_id = m_sheet[f];
-        auto xx = alignments[sheet_id][align];
-
-        // second last: non-boundary halfface
-        auto ch_opp = inputMesh.incident_cell(inputMesh.opposite_halfface_handle(sheet_loop[sheet_loop.size() - 1]));
+        // First: non-boundary halfface
+        auto ch_opp = inputMesh.incident_cell(inputMesh.opposite_halfface_handle(sheet_loop.back()));
         auto p1 = parameter(ch_opp, v1);
         auto p2 = parameter(ch_opp, v2);
-        p1[align] = xx;
-        p2[align] = xx;
+
+        if (m_sheet[f] > -1)
+        {
+            int align = m_alignmentType[sheet_loop.back()];
+            assert(align != SHEET_NONE); // Boundary sheet must be align -- cut makes no sense
+            int sheet_id = m_sheet[f];
+            auto xx = alignments[sheet_id][align];
+            p1[align] = xx;
+            p2[align] = xx;
+        }
 
         // Loop one side
         for (unsigned int i = sheet_loop.size() - 2; i > 0; i--)
         {
-            sheet_id = m_sheet[inputMesh.face_handle(sheet_loop[i])];
+            int sheet_id = m_sheet[inputMesh.face_handle(sheet_loop[i])];
             auto hf_opp = inputMesh.opposite_halfface_handle(sheet_loop[i]);
 
             Transition T = m_transitionsInv[sheet_id];
@@ -2003,16 +2033,28 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
                 T = m_transitions[sheet_id];
             p1 = T.transform_point(p1);
             p2 = T.transform_point(p2);
+
+            // There might be more align sheets in the interior!
+            if (m_alignmentType[hf_opp] != SHEET_NONE)
+            {
+                int align = m_alignmentType[hf_opp];
+                auto xx = alignments[sheet_id][align];
+                p1[align] = xx;
+                p2[align] = xx;
+            }
         }
 
         // Fill final alignment
         // Loop back and fill sectors
         f = inputMesh.face_handle(sheet_loop[0]);
-        sheet_id = m_sheet[f];
-        align = m_alignmentType[sheet_loop[0]];
-        xx = alignments[sheet_id][align];
-        p1[align] = xx;
-        p2[align] = xx;
+        if (m_sheet[f] > -1)
+        {
+            int sheet_id = m_sheet[f];
+            int align = m_alignmentType[sheet_loop[0]];
+            auto xx = alignments[sheet_id][align];
+            p1[align] = xx;
+            p2[align] = xx;
+        }
 
         if (!m_vertexUpdated[v1])
         {
@@ -2114,7 +2156,7 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
 
     // Fill values in Branches
 #ifndef TS3D_SILENT
-    printf("Fill values in singular and feature Branches\n");
+    printf("Fill values in align Branches\n");
 #endif
     for (auto v_it = inputMesh.vertices_begin(); v_it != inputMesh.vertices_end(); ++v_it)
     {
@@ -2132,22 +2174,10 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
             if (branch_edge_count[branch_id] < 2)
                 continue;
 
-            if (inputMesh.is_boundary(e) && (isSingularEdge(e) || !m_edgeFeature[e]))
+            if (!isSingularEdge(e) && !m_edgeFeature[e])
                 continue;
 
             std::vector<HalfFaceHandle> sheet_loop = getSheetLoop(inputMesh.halfedge_handle(e, 0));
-            // auto tranFun = identity;
-            // for (auto sheet_f : sheet_loop)
-            // {
-            //     auto sheet_id = m_sheet[inputMesh.face_handle(sheet_f)];
-            //     auto TT = m_transitions[sheet_id];
-            //     if (!m_orientationType[sheet_f])
-            //         TT = m_transitionsInv[sheet_id];
-            //     tranFun = tranFun * TT;
-            // }
-
-            if (!isSingularEdge(e) && !m_edgeFeature[e])
-                continue;
 
             // Trace this branch sector by sector
             bool fixed_axis = false;
@@ -2288,7 +2318,9 @@ bool TrulySeamless3D::checkSeamlessness()
         auto hf1 = inputMesh.halfface_handle(*f_it, 0);
         auto hf2 = inputMesh.opposite_halfface_handle(hf1);
 
-        if (inputMesh.is_boundary(*f_it) || m_faceFeature[*f_it])
+        if (m_faceFeature[*f_it]
+            || (inputMesh.is_boundary(*f_it)
+                && m_withBoundaryAlignment)) // aligned faces only; boundary alone is not enough (cut faces)
         {
             f_align++;
             if (inputMesh.is_boundary(hf1)) // Get Non border half-face
@@ -2314,7 +2346,7 @@ bool TrulySeamless3D::checkSeamlessness()
                 v_count += 3;
             }
         }
-        else
+        else if (!inputMesh.is_boundary(*f_it)) // non-aligned boundary faces (cut faces) have no opposite cell; skip
         {
             if (m_sheet[*f_it] > -1)
             {
@@ -2460,7 +2492,7 @@ void TrulySeamless3D::perturbParametrization(double perturb)
 
         if (inputMesh.is_boundary(*f_it)) // alignment sheets
         {
-            if (!m_withBoundaryAlignment)
+            if (!m_withBoundaryAlignment && !m_faceFeature[*f_it])
                 continue;
             if (inputMesh.is_boundary(hf1)) // Non border halfface
                 hf1 = hf2;

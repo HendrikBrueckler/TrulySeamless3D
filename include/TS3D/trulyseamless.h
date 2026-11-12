@@ -1,7 +1,6 @@
 #ifndef TRULYSEAMLESS3D_H
 #define TRULYSEAMLESS3D_H
 
-#include <iostream>
 #include <math.h>
 #include <string>
 
@@ -9,12 +8,8 @@
 #include "HexEx/HexExtractor.hh"
 #undef HEXEX_TESTING
 
-#include <algorithm>
-#include <iomanip>
-#include <queue>
-#include <tuple>
+#include <stdexcept>
 
-#include "HexEx/ExactPredicates.hh"
 #include "HexEx/Utils.hh"
 
 #include "HexEx/DerivedExactPredicates.hh"
@@ -30,7 +25,7 @@ using namespace HexEx;
 
 class TrulySeamless3D : public HexExtractor
 {
-  private:
+  public:
     enum SheetType
     {
         SHEET_NONE = -1,
@@ -47,7 +42,7 @@ class TrulySeamless3D : public HexExtractor
         BRANCH_ALIGNZ = 2
     };
 
-  private:
+  public:
     bool m_failFlag = false;
     bool m_algorithmFinished = false;
 
@@ -62,10 +57,10 @@ class TrulySeamless3D : public HexExtractor
 
     // Sheet Info
     HalfFaceProperty<SheetType> m_alignmentType; // u, v or w : 0,1,2
-    FaceProperty<bool> m_isCut; // u, v or w : 0,1,2
-    EdgeProperty<BranchType> m_branchType; // u, v or w : 0,1,2
-    EdgeProperty<CellHandle> m_branchCell; // u, v or w : 0,1,2
-    FaceProperty<int> m_sheet;               //-2 -> usual face, >=0 -> correspoing sheet id
+    FaceProperty<bool> m_isCut;                  // u, v or w : 0,1,2
+    EdgeProperty<BranchType> m_branchType;       // u, v or w : 0,1,2
+    EdgeProperty<CellHandle> m_branchCell;       // u, v or w : 0,1,2
+    FaceProperty<int> m_sheet;                   //-2 -> usual face, >=0 -> correspoing sheet id
     EdgeProperty<int> m_branches;
     VertexProperty<bool> m_node;
 
@@ -99,28 +94,27 @@ class TrulySeamless3D : public HexExtractor
     FaceProperty<bool> m_faceFeature;
 
     // Mapping to original
-    std::vector<VertexHandle> m_vertexLocal;
-    std::vector<CellHandle> m_cellLocal;
-    std::vector<EdgeHandle> m_edgeLocal;
-    std::vector<FaceHandle> m_faceLocal;
+    std::vector<CellHandle> m_cellLocal;                   // tet cell -> submesh cell (a cell has at most one clone)
+    std::vector<std::vector<VertexHandle>> m_vertexLocal;  // tet vertex -> clones in the submesh
+    std::vector<std::vector<EdgeHandle>> m_edgeLocal;      // tet edge -> clones in the submesh
+    std::vector<std::vector<FaceHandle>> m_faceLocal;      // tet face -> clones in the submesh
+    PerCellVertexProperty<VertexHandle> m_cellVertexLocal; // submesh cell -> (submesh vertex -> tet vertex)
 
   public:
     TrulySeamless3D();
 
     template <typename MeshT>
-    TrulySeamless3D(const MeshT& tetmesh) : TrulySeamless3D()
+    TrulySeamless3D(const MeshT& tetmesh)
+        : TrulySeamless3D()
     {
         using inPoint = typename MeshT::PointT;
 
-        auto toVec3d = [&](const inPoint& point)
-        {
-            return Vec3d(point[0], point[1], point[2]);
-        };
+        auto toVec3d = [&](const inPoint& point) { return Vec3d(point[0], point[1], point[2]); };
 
-        m_vertexLocal = std::vector<VertexHandle>(tetmesh.n_vertices());
+        m_vertexLocal = std::vector<std::vector<VertexHandle>>(tetmesh.n_vertices());
         m_cellLocal = std::vector<CellHandle>(tetmesh.n_cells());
-        m_edgeLocal = std::vector<EdgeHandle>(tetmesh.n_edges());
-        m_faceLocal = std::vector<FaceHandle>(tetmesh.n_faces());
+        m_edgeLocal = std::vector<std::vector<EdgeHandle>>(tetmesh.n_edges());
+        m_faceLocal = std::vector<std::vector<FaceHandle>>(tetmesh.n_faces());
 
         // add vertices
         inputMesh.clear(false);
@@ -128,23 +122,23 @@ class TrulySeamless3D : public HexExtractor
         for (auto v_it = tetmesh.vertices_begin(); v_it != tetmesh.vertices_end(); ++v_it)
         {
             auto v = inputMesh.add_vertex(toVec3d(tetmesh.vertex(*v_it)));
-            m_vertexLocal[v_it->idx()] = v;
+            m_vertexLocal[v_it->idx()].push_back(v);
         }
 
-        for (auto e: tetmesh.edges())
+        for (auto e : tetmesh.edges())
         {
             auto vs = tetmesh.edge_vertices(e);
-            auto eNew = inputMesh.add_edge(m_vertexLocal[vs[0].idx()], m_vertexLocal[vs[1].idx()]);
-            m_edgeLocal[e.idx()] = eNew;
+            auto eNew = inputMesh.add_edge(m_vertexLocal[vs[0].idx()][0], m_vertexLocal[vs[1].idx()][0]);
+            m_edgeLocal[e.idx()].push_back(eNew);
         }
 
-        for (auto f: tetmesh.faces())
+        for (auto f : tetmesh.faces())
         {
             std::vector<VertexHandle> vs;
-            for (auto v: tetmesh.get_halfface_vertices(tetmesh.halfface_handle(f, 0)))
-                vs.push_back(m_vertexLocal[v.idx()]);
+            for (auto v : tetmesh.get_halfface_vertices(tetmesh.halfface_handle(f, 0)))
+                vs.push_back(m_vertexLocal[v.idx()][0]);
             auto fNew = inputMesh.add_face(vs);
-            m_faceLocal[f.idx()] = fNew;
+            m_faceLocal[f.idx()].push_back(fNew);
         }
 
         // add tets
@@ -155,12 +149,177 @@ class TrulySeamless3D : public HexExtractor
             m_cellLocal[c_it->idx()] = tet;
         }
 
+        std::vector<VertexHandle> vertexToTet(inputMesh.n_vertices());
+        for (size_t i = 0; i < m_vertexLocal.size(); ++i)
+            vertexToTet[m_vertexLocal[i].front().idx()] = VertexHandle((int)i);
+
+        for (auto ch : inputMesh.cells())
+        {
+            cellVertices[ch] = inputMesh.get_cell_vertices(ch);
+            for (auto vh : cellVertices[ch])
+                m_cellVertexLocal[ch][vh] = vertexToTet[vh.idx()];
+        }
+    }
+
+    // cut faces become literal boundary faces; only explicitly marked feature faces should
+    // receive boundary alignment
+    template <typename MeshT>
+    TrulySeamless3D(const MeshT& tetmesh,
+                    CellProperty<bool>& includeCell,
+                    FaceProperty<bool>& nonCutFace,
+                    EdgeProperty<int>& edgeParametricValence)
+        : TrulySeamless3D()
+    {
+        using inPoint = typename MeshT::PointT;
+
+        auto toVec3d = [&](const inPoint& point) { return Vec3d(point[0], point[1], point[2]); };
+
+        m_withBoundaryAlignment = false;
+
+        m_vertexLocal = std::vector<std::vector<VertexHandle>>(tetmesh.n_vertices());
+        m_edgeLocal = std::vector<std::vector<EdgeHandle>>(tetmesh.n_edges());
+        m_faceLocal = std::vector<std::vector<FaceHandle>>(tetmesh.n_faces());
+        m_cellLocal = std::vector<CellHandle>(tetmesh.n_cells());
+
+        inputMesh.clear(false);
+
+        // corner (cell, vertex) -> new vertex of the sector containing the corner
+        std::vector<std::array<VertexHandle, 4>> cornerVtx(tetmesh.n_cells());
+
+        auto cornerOf = [&](CellHandle c, VertexHandle v)
+        {
+            auto cvs = tetmesh.get_cell_vertices(c);
+            for (int i = 0; i < 4; ++i)
+                if (cvs[i] == v)
+                    return i;
+            return -1;
+        };
+
+        auto sectorBFS = [&](CellHandle cSeed, const std::function<bool(HalfFaceHandle)>& containsX)
+        {
+            std::set<CellHandle> sector;
+            std::list<CellHandle> q;
+            q.push_back(cSeed);
+            sector.insert(cSeed);
+            while (!q.empty())
+            {
+                auto cCurr = q.front();
+                q.pop_front();
+                for (auto chf : tetmesh.cell_halffaces(cCurr))
+                {
+                    if (!containsX(chf) || !nonCutFace[tetmesh.face_handle(chf)])
+                        continue;
+                    auto hfOpp = tetmesh.opposite_halfface_handle(chf);
+                    auto cNext = tetmesh.incident_cell(hfOpp);
+                    if (!cNext.is_valid() || !includeCell[cNext] || sector.contains(cNext))
+                        continue;
+                    sector.insert(cNext);
+                    q.push_back(cNext);
+                }
+            }
+            return sector;
+        };
+
+        for (auto v : tetmesh.vertices())
+        {
+            std::set<CellHandle> visited;
+            for (auto tetSeed : tetmesh.vertex_cells(v))
+            {
+                if (visited.count(tetSeed) || !includeCell[tetSeed])
+                    continue;
+                auto sector = sectorBFS(tetSeed,
+                                        [&](HalfFaceHandle chf)
+                                        {
+                                            for (auto hfv : tetmesh.get_halfface_vertices(chf))
+                                                if (hfv == v)
+                                                    return true;
+                                            return false;
+                                        });
+                visited.insert(sector.begin(), sector.end());
+                auto newV = inputMesh.add_vertex(toVec3d(tetmesh.vertex(v)));
+                m_vertexLocal[v.idx()].push_back(newV);
+                for (auto c : sector)
+                    cornerVtx[c.idx()][cornerOf(c, v)] = newV;
+            }
+        }
+
+        for (auto e : tetmesh.edges())
+        {
+            bool sing = edgeParametricValence[e] != 0;
+            auto vs = tetmesh.edge_vertices(e);
+            auto v1 = vs[0], v2 = vs[1];
+            std::set<CellHandle> visited;
+            for (auto tetSeed : tetmesh.edge_cells(e))
+            {
+                if (visited.count(tetSeed) || !includeCell[tetSeed])
+                    continue;
+                auto sector = sectorBFS(tetSeed,
+                                        [&](HalfFaceHandle chf)
+                                        {
+                                            for (auto hfe : tetmesh.halfface_edges(chf))
+                                                if (hfe == e)
+                                                    return true;
+                                            return false;
+                                        });
+                visited.insert(sector.begin(), sector.end());
+                auto eNew = inputMesh.add_edge(cornerVtx[tetSeed.idx()][cornerOf(tetSeed, v1)],
+                                               cornerVtx[tetSeed.idx()][cornerOf(tetSeed, v2)]);
+                m_edgeLocal[e.idx()].push_back(eNew);
+                edgeSingularity[eNew] = sing;
+            }
+        }
+
+        auto addFaceOf = [&](CellHandle c, FaceHandle f)
+        {
+            for (auto chf : tetmesh.cell(c).halffaces())
+            {
+                if (tetmesh.face_handle(chf) != f)
+                    continue;
+                std::vector<VertexHandle> vs;
+                for (auto hv : tetmesh.get_halfface_vertices(chf))
+                    vs.push_back(cornerVtx[c.idx()][cornerOf(c, hv)]);
+                return inputMesh.add_face(vs);
+            }
+            return FaceHandle();
+        };
+        for (auto f : tetmesh.faces())
+        {
+            auto cs = tetmesh.face_cells(f);
+            auto c0 = cs[0], c1 = cs[1];
+            bool incl0 = c0.is_valid() && includeCell[c0];
+            bool incl1 = c1.is_valid() && includeCell[c1];
+            if (!incl0 && !incl1)
+                continue;
+            if (incl0 && incl1 && !nonCutFace[f])
+            {
+                m_faceLocal[f.idx()].push_back(addFaceOf(c0, f));
+                m_faceLocal[f.idx()].push_back(addFaceOf(c1, f));
+            }
+            else
+                m_faceLocal[f.idx()].push_back(addFaceOf(incl0 ? c0 : c1, f));
+        }
+
+        for (auto c : tetmesh.cells())
+        {
+            if (!includeCell[c])
+                continue;
+            auto cvs = tetmesh.get_cell_vertices(c);
+            auto cNew = inputMesh.add_cell(
+                cornerVtx[c.idx()][0], cornerVtx[c.idx()][1], cornerVtx[c.idx()][2], cornerVtx[c.idx()][3]);
+            m_cellLocal[c.idx()] = cNew;
+            for (int i = 0; i < 4; ++i)
+                m_cellVertexLocal[cNew][cornerVtx[c.idx()][i]] = cvs[i];
+        }
+
         for (auto ch : inputMesh.cells())
             cellVertices[ch] = inputMesh.get_cell_vertices(ch);
+
+        edgeSingularitiesCalculated = true;
     }
 
     template <typename MeshT, typename ParameterT>
-    TrulySeamless3D(const MeshT& tetmesh, PerCellVertexProperty<ParameterT>& parameters) : TrulySeamless3D(tetmesh)
+    TrulySeamless3D(const MeshT& tetmesh, PerCellVertexProperty<ParameterT>& parameters)
+        : TrulySeamless3D(tetmesh)
     {
         for (auto ch : tetmesh.cells())
             for (auto cv_it = tetmesh.cv_iter(ch); cv_it.valid(); ++cv_it)
@@ -168,7 +327,8 @@ class TrulySeamless3D : public HexExtractor
         init();
     }
 
-    TrulySeamless3D(std::string& fileName) : TrulySeamless3D()
+    TrulySeamless3D(std::string& fileName)
+        : TrulySeamless3D()
     {
         HexEx::readFromFile(fileName, inputMesh, vertexParameters);
         for (auto ch : inputMesh.cells())
@@ -178,27 +338,43 @@ class TrulySeamless3D : public HexExtractor
 
     void setFeature(FaceHandle orig_face)
     {
-        m_faceFeature[m_faceLocal[orig_face.idx()]] = true;
+        for (auto f : m_faceLocal[orig_face.idx()])
+            m_faceFeature[f] = true;
     }
 
     void setFeature(EdgeHandle orig_edge)
     {
-        m_edgeFeature[m_edgeLocal[orig_edge.idx()]] = true;
+        for (auto e : m_edgeLocal[orig_edge.idx()])
+            m_edgeFeature[e] = true;
     }
 
     void setFeature(VertexHandle orig_vertex)
     {
-        m_vertexFeature[m_vertexLocal[orig_vertex.idx()]] = true;
+        for (auto v : m_vertexLocal[orig_vertex.idx()])
+            m_vertexFeature[v] = true;
     }
 
     void setParam(CellHandle orig_cell, VertexHandle orig_vertex, const Parameter& param)
     {
-        vertexParameters[m_cellLocal[orig_cell.idx()]][m_vertexLocal[orig_vertex.idx()]] = param;
+        // orig_cell, orig_vertex are tet handles; the submesh vertex of this tet's cell that
+        // corresponds to the tet vertex is unique (a corner belongs to exactly one vertex class)
+        auto ch = m_cellLocal[orig_cell.idx()];
+        for (auto& e : m_cellVertexLocal[ch])
+            if (e.second == orig_vertex)
+            {
+                vertexParameters[ch][e.first] = param;
+                return;
+            }
+        throw std::logic_error("setParam: vertex not found in cell");
     }
 
     Parameter getParam(CellHandle orig_cell, VertexHandle orig_vertex)
     {
-        return vertexParameters[m_cellLocal[orig_cell.idx()]][m_vertexLocal[orig_vertex.idx()]];
+        auto ch = m_cellLocal[orig_cell.idx()];
+        for (auto& e : m_cellVertexLocal[ch])
+            if (e.second == orig_vertex)
+                return vertexParameters[ch][e.first];
+        throw std::logic_error("getParam: vertex not found in cell");
     }
 
     bool sanitize(double perturb = 0.0, bool keepOriginalTransitions = true);
@@ -211,10 +387,9 @@ class TrulySeamless3D : public HexExtractor
     }
 
   private:
-
     Parameter& parameter(CellHandle ch, VertexHandle vh)
     {
-        return vertexParameters[ch][vh];
+        return vertexParameters[ch].at(vh);
     }
 
     // Compute Transition Functions
