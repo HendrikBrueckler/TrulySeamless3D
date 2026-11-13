@@ -2028,14 +2028,21 @@ void TrulySeamless3D::fillSeamlessParameterization(VectorXd& X, double& uv_max)
             int sheet_id = m_sheet[inputMesh.face_handle(sheet_loop[i])];
             auto hf_opp = inputMesh.opposite_halfface_handle(sheet_loop[i]);
 
+            if (!m_orientationType[hf_opp] && m_alignmentType[hf_opp] != SHEET_NONE) // align on other side
+            {
+                int align = m_alignmentType[hf_opp.opposite_handle()];
+                auto xx = alignments[sheet_id][align];
+                p1[align] = xx;
+                p2[align] = xx;
+            }
+
             Transition T = m_transitionsInv[sheet_id];
             if (!m_orientationType[hf_opp])
                 T = m_transitions[sheet_id];
             p1 = T.transform_point(p1);
             p2 = T.transform_point(p2);
 
-            // There might be more align sheets in the interior!
-            if (m_alignmentType[hf_opp] != SHEET_NONE)
+            if (m_orientationType[hf_opp] && m_alignmentType[hf_opp] != SHEET_NONE)
             {
                 int align = m_alignmentType[hf_opp];
                 auto xx = alignments[sheet_id][align];
@@ -2308,6 +2315,7 @@ bool TrulySeamless3D::checkSeamlessness()
     [[maybe_unused]] int f_cut = 0;
     [[maybe_unused]] int f_identity = 0;
     int v_count = 0;
+    [[maybe_unused]] int v_count_nonalign = 0;
     [[maybe_unused]] int bad_alignment = 0;
     [[maybe_unused]] int bad_cut = 0;
     [[maybe_unused]] int bad_identity = 0;
@@ -2384,6 +2392,7 @@ bool TrulySeamless3D::checkSeamlessness()
 
                 er = true;
                 v_count++;
+                v_count_nonalign++;
             }
 
             if (T == identity)
@@ -2465,8 +2474,9 @@ bool TrulySeamless3D::checkSeamlessness()
                   << endl;
         std::cout << (m_algorithmFinished ? "ERROR" : "INFO")
                   << ": Misaligned boundary/feature Faces: " << bad_alignment << endl;
-        std::cout << (m_algorithmFinished ? "ERROR" : "INFO") << ": " << v_count << " vertices not seamless across "
-                  << bad_cut << " cut faces and " << bad_identity << " identity faces\n"
+        std::cout << (m_algorithmFinished ? "ERROR" : "INFO") << ": " << v_count_nonalign
+                  << " vertices not aligned/seamless across " << bad_cut << " cut faces and " << bad_identity
+                  << " identity faces\n"
                   << endl;
 #endif
         return false;
